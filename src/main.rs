@@ -2,7 +2,11 @@ use std::{fs, path::Path};
 
 use bodymovin::Bodymovin as Lottie;
 use iconimation::Template;
-use skrifa::raw::FontRef;
+use kurbo::Point;
+use skrifa::{
+    raw::{FontRef, TableProvider},
+    MetadataProvider,
+};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -15,6 +19,18 @@ fn main() {
                 .unwrap_or_default()
         })
         .collect();
+
+    let codepoints: Vec<_> = args
+        .iter()
+        .filter_map(|arg| {
+            arg.starts_with("0x")
+                .then(|| u32::from_str_radix(&arg[2..], 16).unwrap())
+        })
+        .collect();
+    if codepoints.is_empty() {
+        eprintln!("No codepoints!");
+        return;
+    }
 
     let font_file: Vec<_> = args
         .iter()
@@ -31,13 +47,21 @@ fn main() {
     }
     let font_file = font_file[0];
     let font_bytes = fs::read(font_file).unwrap();
-    let font = FontRef::new(&font_bytes);
+    let font = FontRef::new(&font_bytes).unwrap();
+    let upem = font.head().unwrap().units_per_em() as f64;
+    let font_drawbox = (Point::ZERO, Point::new(upem, upem)).into();
+    let outline_loader = font.outline_glyphs();
 
-    let codepoints: Vec<_> = args
+    let glyphs: Vec<_> = codepoints
         .iter()
-        .filter_map(|arg| {
-            arg.starts_with("0x")
-                .then(|| u32::from_str_radix(&arg[2..], 16).unwrap())
+        .map(|cp| {
+            let gid = font
+                .charmap()
+                .map(*cp)
+                .unwrap_or_else(|| panic!("No gid for 0x{cp:04x}"));
+            outline_loader
+                .get(gid)
+                .unwrap_or_else(|| panic!("No outline for 0x{cp:04x} (gid {gid})"))
         })
         .collect();
 
@@ -45,13 +69,16 @@ fn main() {
         let lottie = Lottie::load(lottie_file).unwrap();
         eprintln!("Parsed {lottie_file:?}");
 
-        for codepoint in &codepoints {
-            let lottie = lottie.clone().replace_shape().unwrap();
-        }
+        for (glyph, cp) in glyphs.iter().zip(codepoints.iter()) {
+            let mut lottie = lottie.clone();
+            lottie.replace_shape(&font_drawbox, &glyph).unwrap();
 
-        eprintln!(
-            "Updated\n{}",
-            serde_json::to_string_pretty(&lottie).unwrap()
-        );
+            let out_file = format!(
+                "{}-{cp:04x}.json",
+                lottie_file.file_stem().unwrap().to_str().unwrap()
+            );
+            fs::write(&out_file, serde_json::to_string_pretty(&lottie).unwrap()).unwrap();
+            eprintln!("Wrote {out_file:?}");
+        }
     }
 }
