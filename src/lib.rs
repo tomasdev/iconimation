@@ -9,7 +9,7 @@ use bodymovin::{
     shapes::{AnyShape, Shape},
     Bodymovin as Lottie,
 };
-use kurbo::{Affine, BezPath, Point, Rect};
+use kurbo::{Affine, BezPath, Rect};
 use skrifa::{instance::Size, OutlineGlyph};
 use write_fonts::pens::TransformPen;
 
@@ -25,19 +25,15 @@ impl Template for Lottie {
             let AnyLayer::Shape(layer) = layer else {
                 continue;
             };
-            let Some("placeholder") = layer.name.as_ref().map(|n| n.as_str()) else {
-                continue;
-            };
+            let mut shapes_updated = 0;
             for potential_placeholder in layer.mixin.shapes.iter_mut() {
-                if Some("placeholder") != potential_placeholder.name() {
-                    continue;
-                }
                 let AnyShape::Group(group) = potential_placeholder else {
-                    eprintln!("Found a placeholder layer with a placeholder shpae but that shape isn't a group");
                     continue;
                 };
-                let mut shapes_updated = 0;
-
+                if Some("placeholder") != group.name.as_deref() {
+                    continue;
+                }
+                
                 // We have all the best nesting
                 let mut frontier = Vec::new();
                 let mut insert_at = Vec::with_capacity(1);
@@ -45,19 +41,28 @@ impl Template for Lottie {
                 while let Some(group) = frontier.pop() {
                     insert_at.clear();
                     for (i, item) in group.items.iter_mut().enumerate() {
-                        match item {
-                            AnyShape::Shape(shape) => {
-                                let lottie_box = bez_for_shape(shape).control_box();
-                                let font_to_lottie =
-                                    font_units_to_lottie_units(font_drawbox, &lottie_box);
-                                let p0 = font_to_lottie
-                                    * Point::new(font_drawbox.min_x(), font_drawbox.min_y());
-                                let p1 = font_to_lottie
-                                    * Point::new(font_drawbox.max_x(), font_drawbox.max_y());
-                                insert_at.push((i, font_to_lottie));
+
+                        let lottie_box = match item {
+                            AnyShape::Shape(shape) => Some(bez_for_shape(shape).control_box()),
+                            AnyShape::Rect(rect) => {
+                                let Value::Fixed(pos) = &rect.position.value else {
+                                    panic!("Unable to process {rect:#?} position, must be fixed");
+                                };
+                                let Value::Fixed(size) = &rect.size.value else {
+                                    panic!("Unable to process {rect:#?} size, must be fixed");
+                                };
+                                assert_eq!(2, pos.len());
+                                assert_eq!(2, size.len());
+                                Some(Rect { x0: pos[0], y0: pos[1], x1: size[0], y1: size[1] })
                             }
-                            _ => (),
-                        }
+                            _ => None,
+                        };
+                        let Some(lottie_box) = lottie_box else {
+                            continue;
+                        };
+                        let font_to_lottie =
+                            font_units_to_lottie_units(font_drawbox, &lottie_box);
+                        insert_at.push((i, font_to_lottie));
                     }
                     // reverse because replacing 1:n shifts indices past our own
                     for (i, transform) in insert_at.iter().rev() {
@@ -76,9 +81,10 @@ impl Template for Lottie {
                         }
                     }
                 }
-                if shapes_updated == 0 {
-                    eprintln!("Found a placeholder layer but it contained no shapes to update?!");
-                }
+            }
+
+            if shapes_updated == 0 {
+                panic!("No placeholders replaced!!");
             }
         }
         Ok(())
