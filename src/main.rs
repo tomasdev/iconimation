@@ -37,7 +37,7 @@ fn main() {
         .map(Path::new)
         .filter(|p| {
             p.extension()
-                .map(|ext| ext.eq_ignore_ascii_case("ttf"))
+                .map(|ext| ext.eq_ignore_ascii_case("ttf") || ext.eq_ignore_ascii_case("otf"))
                 .unwrap_or_default()
         })
         .collect();

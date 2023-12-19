@@ -50,14 +50,10 @@ impl Template for Lottie {
                                 let lottie_box = bez_for_shape(shape).control_box();
                                 let font_to_lottie =
                                     font_units_to_lottie_units(font_drawbox, &lottie_box);
-                                eprintln!("font box   {font_drawbox:?}");
-                                eprintln!("lottie box {lottie_box:?}");
-                                eprintln!("box 2 box  {font_to_lottie:?}");
                                 let p0 = font_to_lottie
                                     * Point::new(font_drawbox.min_x(), font_drawbox.min_y());
                                 let p1 = font_to_lottie
                                     * Point::new(font_drawbox.max_x(), font_drawbox.max_y());
-                                eprintln!("font => lottie {}", Rect::from_points(p0, p1));
                                 insert_at.push((i, font_to_lottie));
                             }
                             _ => (),
@@ -66,15 +62,6 @@ impl Template for Lottie {
                     // reverse because replacing 1:n shifts indices past our own
                     for (i, transform) in insert_at.iter().rev() {
                         let glyph_shapes = shapes_for_glyph(glyph, *transform)?;
-                        eprintln!(
-                            "Replace {}[{i}], with {} shapes that exist in {:?}",
-                            group.name.as_ref().map(|s| s.as_str()).unwrap_or(""),
-                            glyph_shapes.len(),
-                            font_drawbox,
-                        );
-                        for gs in &glyph_shapes {
-                            eprintln!("  glyph shape box {:?}", bez_for_shape(gs).control_box());
-                        }
                         group.items.splice(
                             *i..(*i + 1),
                             glyph_shapes.clone().into_iter().map(|s| AnyShape::Shape(s)),
@@ -129,12 +116,6 @@ fn font_units_to_lottie_units(font_box: &Rect, lottie_box: &Rect) -> Affine {
 }
 
 fn bez_for_shape(shape: &Shape) -> BezPath {
-    // Current guess as to how to interpret shape:
-    // There are len(oncurve) - 1 beziers:
-    //    start = oncurve[i]
-    //    ctl1 = out_point[i] ... which is an offset?
-    //    ctl2 = in_point[i + 1] ... which is an offset?
-    //    end = oncurve[i + 1]
     let Value::Fixed(shape) = &shape.vertices.value else {
         panic!("what is {shape:?}");
     };
@@ -158,11 +139,20 @@ fn shapes_for_glyph(
     glyph: &OutlineGlyph,
     font_units_to_lottie_units: Affine,
 ) -> Result<Vec<Shape>, Error> {
+    // Fonts draw Y-up, Lottie Y-down. The transform to transition should be negative determinant.
+    // Normally a negative determinant flips curve direction but since we're also moving
+    // to a coordinate system with Y flipped it should cancel out.
+    assert!(
+        font_units_to_lottie_units.determinant() < 0.0,
+        "We assume a negative determinant"
+    );
+
     let mut shape_pen = ShapePen::default();
     let mut transform_pen = TransformPen::new(&mut shape_pen, font_units_to_lottie_units);
     glyph
         .draw(Size::unscaled(), &mut transform_pen)
         .map_err(Error::DrawError)?;
+
     Ok(shape_pen.to_shapes())
 }
 

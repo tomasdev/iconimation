@@ -70,45 +70,56 @@ impl Thirds for Point {
     }
 }
 
+/// Add a cubic with absolute coordinates to a Lottie b-spline
+fn add_cubic(shape: &mut ShapeValue, c0: Point, c1: Point, end: Point) {
+    // Shape is a cubic B-Spline
+    //  vertices are oncurve points, absolute coordinates
+    //  in_point[i] is the "incoming" control point for vertices[i+1], relative coordinate.
+    //  out_point[i] is the "outgoing" control point for vertices[i], relative coordinate.
+    // Contrast with a typical cubic (https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorial/Paths#b%C3%A9zier_curves)
+    // Cubic[i] in absolute terms is formed by:
+    //      Start:          vertices[i]
+    //      First control:  vertices[i] + outgoing[i]
+    //      Second control: vertices[i + 1] + incoming[i]
+    //      End:            vertices[i + 1]
+    // If closed 1 past the end of vertices is vertices[0]
+
+    let start: Point = shape
+        .vertices
+        .last()
+        .map(|coords| (*coords).into())
+        .unwrap_or_default();
+    let i = shape.vertices.len() - 1;
+
+    shape.out_point.push(Point::ZERO.into());
+    shape.in_point.push(Point::ZERO.into());
+
+    shape.out_point[i] = (c0 - start).into();
+    shape.in_point[i + 1] = (c1 - end).into();
+    shape.vertices.push(end.into());
+}
+
 fn bez_to_shape(path: &BezPath) -> Shape {
     eprintln!("bez to shape, cbox {:?}", path.control_box());
-    // Shape is a cubic B-Spline
-    //  vertices are oncurve
-    //  out_point is the first control point
-    //  in_point is the second control point
-    // Cubic[i] is formed vertices[i], outgoing[i], incoming[i], vertices[i + 1]
-    // If closed 1 past the end of vertices is vertices[0]
+
     let mut vertices = ShapeValue::default();
     for el in path.iter() {
         let last_on: Point = vertices.vertices.last().cloned().unwrap_or_default().into();
         match el {
             kurbo::PathEl::MoveTo(p) => {
                 vertices.vertices.push(p.into());
-
-                vertices.out_point.push(p.into());
-                vertices.in_point.push(p.into());
+                vertices.out_point.push(Point::ZERO.into());
+                vertices.in_point.push(Point::ZERO.into());
             }
-            kurbo::PathEl::LineTo(p) => {
-                vertices.out_point.push(last_on.into());
-                vertices.in_point.push(p.into());
-                vertices.vertices.push(p.into());
-            }
+            kurbo::PathEl::LineTo(p) => add_cubic(&mut vertices, last_on, p.into(), p.into()),
             kurbo::PathEl::QuadTo(control, end) => {
                 // https://pomax.github.io/bezierinfo/#reordering
                 let c0 = last_on.one_third() + control.two_thirds().to_vec2();
                 let c1 = control.two_thirds() + end.one_third().to_vec2();
-                vertices.out_point.push(c0.into());
-                vertices.in_point.push(c1.into());
-                vertices.vertices.push(end.into());
+                add_cubic(&mut vertices, c0, c1, end);
             }
-            kurbo::PathEl::CurveTo(c0, c1, end) => {
-                vertices.out_point.push(c0.into());
-                vertices.in_point.push(c1.into());
-                vertices.vertices.push(end.into());
-            }
-            kurbo::PathEl::ClosePath => {
-                vertices.closed = Some(true);
-            }
+            kurbo::PathEl::CurveTo(c0, c1, end) => add_cubic(&mut vertices, c0, c1, end),
+            kurbo::PathEl::ClosePath => vertices.closed = Some(true),
         }
     }
     if vertices.closed.is_none() {
