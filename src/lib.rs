@@ -1,29 +1,79 @@
 //! Shove glyphs from a variable font into a Lottie template.
 
+pub mod animate;
 pub mod error;
 mod shape_pen;
 
 use bodymovin::{
-    layers::AnyLayer,
-    properties::{
-        Bezier2d, BezierEase, ControlPoint2d, MultiDimensionalKeyframe, MultiDimensionalValue,
-        Property, Value,
-    },
-    shapes::{AnyShape, Fill, Group, Shape, Transform},
+    layers::{AnyLayer, ShapeMixin},
+    properties::{Property, Value},
+    shapes::{AnyShape, Group, Shape},
     Bodymovin as Lottie,
 };
 use kurbo::{Affine, BezPath, Rect};
 use skrifa::{instance::Size, OutlineGlyph};
 use write_fonts::pens::TransformPen;
 
-use crate::{error::Error, shape_pen::ShapePen};
+use crate::{animate::Animator, error::Error, shape_pen::ShapePen};
+
+pub fn default_template(font_drawbox: &Rect) -> Lottie {
+    Lottie {
+        in_point: 0.0,
+        out_point: 60.0, // 60fps total animation = 1s
+        frame_rate: 60.0,
+        width: font_drawbox.width() as i64,
+        height: font_drawbox.height() as i64,
+        layers: vec![AnyLayer::Shape(bodymovin::layers::Shape {
+            in_point: 0.0,
+            out_point: 60.0, // 60fps total animation = 1s
+            mixin: ShapeMixin {
+                shapes: vec![AnyShape::Group(Group {
+                    name: Some("placeholder".into()),
+                    items: vec![
+                        // de facto standard is shape(s), fill, transform
+                        AnyShape::Rect(bodymovin::shapes::Rect {
+                            position: Property {
+                                value: Value::Fixed(vec![0.0, 0.0]),
+                                ..Default::default()
+                            },
+                            size: Property {
+                                value: Value::Fixed(vec![
+                                    font_drawbox.width(),
+                                    font_drawbox.height(),
+                                ]),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        }),
+                        AnyShape::Fill(Default::default()),
+                        AnyShape::Transform(Default::default()),
+                    ],
+                    ..Default::default()
+                })],
+                ..Default::default()
+            },
+            ..Default::default()
+        })],
+        ..Default::default()
+    }
+}
 
 pub trait Template {
-    fn replace_shape(&mut self, font_drawbox: &Rect, glyph: &OutlineGlyph) -> Result<(), Error>;
+    fn replace_shape(
+        &mut self,
+        font_drawbox: &Rect,
+        glyph: &OutlineGlyph,
+        animator: Box<dyn Animator>,
+    ) -> Result<(), Error>;
 }
 
 impl Template for Lottie {
-    fn replace_shape(&mut self, font_drawbox: &Rect, glyph: &OutlineGlyph) -> Result<(), Error> {
+    fn replace_shape(
+        &mut self,
+        font_drawbox: &Rect,
+        glyph: &OutlineGlyph,
+        animator: Box<dyn Animator>,
+    ) -> Result<(), Error> {
         for layer in self.layers.iter_mut() {
             let AnyLayer::Shape(layer) = layer else {
                 continue;
@@ -73,15 +123,10 @@ impl Template for Lottie {
                 }
                 // reverse because replacing 1:n shifts indices past our own
                 for (i, transform) in insert_at.iter().rev() {
-                    let glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?
-                        .into_iter()
-                        .enumerate()
-                        // TODO: we probably don't *always* want pulse
-                        .map(pulse)
-                        // .map(|shape| AnyShape::Shape(shape))
-                        .collect();
-                    eprintln!("Splice {} shapes in", glyph_shapes.len());
-                    placeholder.items.splice(*i..(*i + 1), glyph_shapes);
+                    let glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?;
+                    let animated_shapes =
+                        animator.animate(layer.in_point, layer.out_point, glyph_shapes)?;
+                    placeholder.items.splice(*i..(*i + 1), animated_shapes);
                 }
                 shapes_updated += insert_at.len();
             }
@@ -92,58 +137,6 @@ impl Template for Lottie {
         }
         Ok(())
     }
-}
-
-fn pulse(args: (usize, Shape)) -> AnyShape {
-    let (i, shape) = args;
-    // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
-    // says players like to find a transform at the end of a group so we'll build our pulse as a group
-    // of [shape, pulse]
-    let mut group = Group::default();
-    group.items.push(AnyShape::Shape(shape));
-    group.items.push(AnyShape::Fill(Fill {
-        opacity: Property {
-            value: Value::Fixed(100.0),
-            ..Default::default()
-        },
-        color: Property {
-            value: Value::Fixed(vec![1.0, 0.0, 0.0, 1.0]),
-            ..Default::default()
-        },
-        ..Default::default()
-    }));
-    // If https://lottiefiles.github.io/lottie-docs/playground/json_editor/ is to be believed
-    // the bezier ease is fairly required
-    let ease = BezierEase::_2D(Bezier2d {
-        in_value: Default::default(),
-        out_value: Default::default(),
-    });
-    let i = i as f64;
-    let mut transform = Transform::default();
-    transform.scale.animated = 1;
-    transform.scale.value = Value::Animated(vec![
-        MultiDimensionalKeyframe {
-            start_time: 5.0 * i,
-            start_value: Some(vec![100.0, 100.0]),
-            bezier: Some(ease.clone()),
-            ..Default::default()
-        },
-        MultiDimensionalKeyframe {
-            start_time: 10.0 + 5.0 * i,
-            start_value: Some(vec![150.0, 150.0]),
-            bezier: Some(ease.clone()),
-            ..Default::default()
-        },
-        MultiDimensionalKeyframe {
-            start_time: 15.0 + 5.0 * i,
-            start_value: Some(vec![100.0, 100.0]),
-            bezier: Some(ease),
-            ..Default::default()
-        },
-    ]);
-    group.items.push(AnyShape::Transform(transform));
-
-    AnyShape::Group(group)
 }
 
 /// Simplified version of [Affine2D::rect_to_rect](https://github.com/googlefonts/picosvg/blob/a0bcfade7a60cbd6f47d8bfe65b6d471cee628c0/src/picosvg/svg_transform.py#L216-L263)
@@ -196,10 +189,11 @@ fn bez_for_shape(shape: &Shape) -> BezPath {
     path
 }
 
+/// Returns a [Shape] and [BezPath] in Lottie units for each subpath of a glyph
 fn shapes_for_glyph(
     glyph: &OutlineGlyph,
     font_units_to_lottie_units: Affine,
-) -> Result<Vec<Shape>, Error> {
+) -> Result<Vec<(BezPath, Shape)>, Error> {
     // Fonts draw Y-up, Lottie Y-down. The transform to transition should be negative determinant.
     // Normally a negative determinant flips curve direction but since we're also moving
     // to a coordinate system with Y flipped it should cancel out.

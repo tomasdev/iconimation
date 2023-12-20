@@ -22,8 +22,14 @@ impl ShapePen {
         return self.paths.last_mut().unwrap();
     }
 
-    pub fn to_shapes(self) -> Vec<Shape> {
-        self.paths.iter().map(bez_to_shape).collect()
+    pub fn to_shapes(self) -> Vec<(BezPath, Shape)> {
+        self.paths
+            .into_iter()
+            .map(|b| {
+                let shape = bez_to_shape(&b);
+                (b, shape)
+            })
+            .collect()
     }
 }
 

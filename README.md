@@ -21,11 +21,10 @@ Don't count on anything working correctly.
    
 
     # I definitely need a Lottie that doesn't do anything!
-    $ cargo run resources/templates/Still.json 0xe86c ../material-design-icons/font/MaterialIconsOutlined-Regular.otf
-    Wrote "still-e86c.json"
+    $ --codepoint 0xeba8 --font ../material-design-icons/font/MaterialIconsOutlined-Regular.otf --animation still
 
     # A spin perhaps?
-    $ cargo run resources/templates/dsquare.json 0xe86c ../material-design-icons/font/MaterialIconsOutlined-Regular.otf
+    $ --codepoint 0xeba8 --font ../material-design-icons/font/MaterialIconsOutlined-Regular.otf --animation twirl
     ```
 
 1. Try it out
