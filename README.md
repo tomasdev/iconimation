@@ -14,15 +14,18 @@ Don't count on anything working correctly.
 1. Replace a placeholder in the template with an icon
 
     ```shell
-    # Example assumes that material-design-icons is cloned sibling to current directory
-    # and that current directory is the root a clone of this repo
+    # Example assumes that:
+    # 1) We are in the root of this repo
+    # 2) git@github.com:google/material-design-icons.git is cloned sibling to current directory
+    # 3) git@github.com:rsheeter/bodymovin-rs.git is cloned sibling to the current directory
+   
 
     # I definitely need a Lottie that doesn't do anything!
-    $ cargo run resources/templates/still.json 0xe86c ../material-design-icons/font/MaterialIconsOutlined-Regular.otf
+    $ cargo run resources/templates/Still.json 0xe86c ../material-design-icons/font/MaterialIconsOutlined-Regular.otf
     Wrote "still-e86c.json"
 
     # A spin perhaps?
-    $ cargo run resources/templates/twirl.json 0xe86c ../material-design-icons/font/MaterialIconsOutlined-Regular.otf
+    $ cargo run resources/templates/dsquare.json 0xe86c ../material-design-icons/font/MaterialIconsOutlined-Regular.otf
     ```
 
 1. Try it out

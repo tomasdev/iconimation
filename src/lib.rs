@@ -5,8 +5,8 @@ mod shape_pen;
 
 use bodymovin::{
     layers::AnyLayer,
-    properties::Value,
-    shapes::{AnyShape, Shape},
+    properties::{Value, MultiDimensionalKeyframe, MultiDimensionalValue},
+    shapes::{AnyShape, Group, Shape, Transform},
     Bodymovin as Lottie,
 };
 use kurbo::{Affine, BezPath, Rect};
@@ -26,61 +26,60 @@ impl Template for Lottie {
                 continue;
             };
             let mut shapes_updated = 0;
-            for potential_placeholder in layer.mixin.shapes.iter_mut() {
-                let AnyShape::Group(group) = potential_placeholder else {
-                    continue;
-                };
-                if Some("placeholder") != group.name.as_deref() {
-                    continue;
-                }
-                
-                // We have all the best nesting
-                let mut frontier = Vec::new();
-                let mut insert_at = Vec::with_capacity(1);
-                frontier.push(group);
-                while let Some(group) = frontier.pop() {
-                    insert_at.clear();
-                    for (i, item) in group.items.iter_mut().enumerate() {
-
-                        let lottie_box = match item {
-                            AnyShape::Shape(shape) => Some(bez_for_shape(shape).control_box()),
-                            AnyShape::Rect(rect) => {
-                                let Value::Fixed(pos) = &rect.position.value else {
-                                    panic!("Unable to process {rect:#?} position, must be fixed");
-                                };
-                                let Value::Fixed(size) = &rect.size.value else {
-                                    panic!("Unable to process {rect:#?} size, must be fixed");
-                                };
-                                assert_eq!(2, pos.len());
-                                assert_eq!(2, size.len());
-                                Some(Rect { x0: pos[0], y0: pos[1], x1: size[0], y1: size[1] })
-                            }
-                            _ => None,
-                        };
-                        let Some(lottie_box) = lottie_box else {
-                            continue;
-                        };
-                        let font_to_lottie =
-                            font_units_to_lottie_units(font_drawbox, &lottie_box);
-                        insert_at.push((i, font_to_lottie));
+            let placeholders: Vec<_> = layer
+                .mixin
+                .shapes
+                .iter_mut()
+                .filter_map(|any| match any {
+                    AnyShape::Group(group) if group.name.as_deref() == Some("placeholder") => {
+                        Some(group)
                     }
-                    // reverse because replacing 1:n shifts indices past our own
-                    for (i, transform) in insert_at.iter().rev() {
-                        let glyph_shapes = shapes_for_glyph(glyph, *transform)?;
-                        group.items.splice(
-                            *i..(*i + 1),
-                            glyph_shapes.clone().into_iter().map(|s| AnyShape::Shape(s)),
-                        );
-                    }
-                    shapes_updated += insert_at.len();
+                    _ => None,
+                })
+                .collect();
 
-                    for item in group.items.iter_mut() {
-                        match item {
-                            AnyShape::Group(g) => frontier.push(g),
-                            _ => (),
+            let mut insert_at = Vec::with_capacity(1);
+            for placeholder in placeholders {
+                insert_at.clear();
+                for (i, item) in placeholder.items.iter_mut().enumerate() {
+                    let lottie_box = match item {
+                        AnyShape::Shape(shape) => Some(bez_for_shape(shape).control_box()),
+                        AnyShape::Rect(rect) => {
+                            let Value::Fixed(pos) = &rect.position.value else {
+                                panic!("Unable to process {rect:#?} position, must be fixed");
+                            };
+                            let Value::Fixed(size) = &rect.size.value else {
+                                panic!("Unable to process {rect:#?} size, must be fixed");
+                            };
+                            assert_eq!(2, pos.len());
+                            assert_eq!(2, size.len());
+                            Some(Rect {
+                                x0: pos[0],
+                                y0: pos[1],
+                                x1: size[0],
+                                y1: size[1],
+                            })
                         }
-                    }
+                        _ => None,
+                    };
+                    let Some(lottie_box) = lottie_box else {
+                        continue;
+                    };
+                    let font_to_lottie = font_units_to_lottie_units(font_drawbox, &lottie_box);
+                    insert_at.push((i, font_to_lottie));
                 }
+                // reverse because replacing 1:n shifts indices past our own
+                for (i, transform) in insert_at.iter().rev() {
+                    let glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?
+                        .into_iter()
+                        // TODO: we probably don't *always* want pulse
+                        //.map(pulse)
+                        .map(|shape| AnyShape::Shape(shape))
+                        .collect();
+                    eprintln!("Splice {} shapes in", glyph_shapes.len());
+                    placeholder.items.splice(*i..(*i + 1), glyph_shapes);                    
+                }
+                shapes_updated += insert_at.len();
             }
 
             if shapes_updated == 0 {
@@ -90,6 +89,36 @@ impl Template for Lottie {
         Ok(())
     }
 }
+
+// fn pulse(shape: Shape) -> AnyShape {
+//     // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
+//     // says players like to find a transform at the end of a group so we'll build our pulse as a group
+//     // of [shape, pulse]
+//     let mut group = Group::default();
+//     group.items.push(AnyShape::Shape(shape));
+//     // let mut transform = Transform::default();
+
+//     // transform.scale.value = Value::Animated(vec![
+//     //     MultiDimensionalKeyframe {
+//     //         start_time: 0.0,
+//     //         start_value: Some(vec![100.0, 100.0]),
+//     //         ..Default::default()
+//     //     },
+//     //     MultiDimensionalKeyframe {
+//     //         start_time: 15.0,
+//     //         start_value: Some(vec![150.0, 150.0]),
+//     //         ..Default::default()
+//     //     },
+//     //     MultiDimensionalKeyframe {
+//     //         start_time: 30.0,
+//     //         start_value: Some(vec![100.0, 100.0]),
+//     //         ..Default::default()
+//     //     },
+//     // ]);
+//     // group.items.push(AnyShape::Transform(transform));
+
+//     AnyShape::Group(group)
+// }
 
 /// Simplified version of [Affine2D::rect_to_rect](https://github.com/googlefonts/picosvg/blob/a0bcfade7a60cbd6f47d8bfe65b6d471cee628c0/src/picosvg/svg_transform.py#L216-L263)
 fn font_units_to_lottie_units(font_box: &Rect, lottie_box: &Rect) -> Affine {
