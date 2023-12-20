@@ -5,8 +5,11 @@ mod shape_pen;
 
 use bodymovin::{
     layers::AnyLayer,
-    properties::{Value, MultiDimensionalKeyframe, MultiDimensionalValue},
-    shapes::{AnyShape, Group, Shape, Transform},
+    properties::{
+        Bezier2d, BezierEase, ControlPoint2d, MultiDimensionalKeyframe, MultiDimensionalValue,
+        Property, Value,
+    },
+    shapes::{AnyShape, Fill, Group, Shape, Transform},
     Bodymovin as Lottie,
 };
 use kurbo::{Affine, BezPath, Rect};
@@ -73,11 +76,11 @@ impl Template for Lottie {
                     let glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?
                         .into_iter()
                         // TODO: we probably don't *always* want pulse
-                        //.map(pulse)
-                        .map(|shape| AnyShape::Shape(shape))
+                        .map(pulse)
+                        // .map(|shape| AnyShape::Shape(shape))
                         .collect();
                     eprintln!("Splice {} shapes in", glyph_shapes.len());
-                    placeholder.items.splice(*i..(*i + 1), glyph_shapes);                    
+                    placeholder.items.splice(*i..(*i + 1), glyph_shapes);
                 }
                 shapes_updated += insert_at.len();
             }
@@ -90,35 +93,55 @@ impl Template for Lottie {
     }
 }
 
-// fn pulse(shape: Shape) -> AnyShape {
-//     // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
-//     // says players like to find a transform at the end of a group so we'll build our pulse as a group
-//     // of [shape, pulse]
-//     let mut group = Group::default();
-//     group.items.push(AnyShape::Shape(shape));
-//     // let mut transform = Transform::default();
+fn pulse(shape: Shape) -> AnyShape {
+    // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
+    // says players like to find a transform at the end of a group so we'll build our pulse as a group
+    // of [shape, pulse]
+    let mut group = Group::default();
+    group.items.push(AnyShape::Shape(shape));
+    group.items.push(AnyShape::Fill(Fill {
+        opacity: Property {
+            value: Value::Fixed(100.0),
+            ..Default::default()
+        },
+        color: Property {
+            value: Value::Fixed(vec![1.0, 0.0, 0.0, 1.0]),
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    // If https://lottiefiles.github.io/lottie-docs/playground/json_editor/ is to be believed
+    // the bezier ease is fairly required
+    let ease = BezierEase::_2D(Bezier2d {
+        in_value: Default::default(),
+        out_value: Default::default(),
+    });
+    let mut transform = Transform::default();
+    transform.scale.animated = 1;
+    transform.scale.value = Value::Animated(vec![
+        MultiDimensionalKeyframe {
+            start_time: 0.0,
+            start_value: Some(vec![100.0, 100.0]),
+            bezier: Some(ease.clone()),
+            ..Default::default()
+        },
+        MultiDimensionalKeyframe {
+            start_time: 15.0,
+            start_value: Some(vec![150.0, 150.0]),
+            bezier: Some(ease.clone()),
+            ..Default::default()
+        },
+        MultiDimensionalKeyframe {
+            start_time: 30.0,
+            start_value: Some(vec![100.0, 100.0]),
+            bezier: Some(ease),
+            ..Default::default()
+        },
+    ]);
+    group.items.push(AnyShape::Transform(transform));
 
-//     // transform.scale.value = Value::Animated(vec![
-//     //     MultiDimensionalKeyframe {
-//     //         start_time: 0.0,
-//     //         start_value: Some(vec![100.0, 100.0]),
-//     //         ..Default::default()
-//     //     },
-//     //     MultiDimensionalKeyframe {
-//     //         start_time: 15.0,
-//     //         start_value: Some(vec![150.0, 150.0]),
-//     //         ..Default::default()
-//     //     },
-//     //     MultiDimensionalKeyframe {
-//     //         start_time: 30.0,
-//     //         start_value: Some(vec![100.0, 100.0]),
-//     //         ..Default::default()
-//     //     },
-//     // ]);
-//     // group.items.push(AnyShape::Transform(transform));
-
-//     AnyShape::Group(group)
-// }
+    AnyShape::Group(group)
+}
 
 /// Simplified version of [Affine2D::rect_to_rect](https://github.com/googlefonts/picosvg/blob/a0bcfade7a60cbd6f47d8bfe65b6d471cee628c0/src/picosvg/svg_transform.py#L216-L263)
 fn font_units_to_lottie_units(font_box: &Rect, lottie_box: &Rect) -> Affine {

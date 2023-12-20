@@ -129,7 +129,6 @@ fn bez_to_shape(path: &BezPath) -> Shape {
         );
     }
     Shape {
-        closed: vertices.closed.unwrap_or_default(),
         vertices: Property {
             value: Value::Fixed(vertices),
             ..Default::default()
