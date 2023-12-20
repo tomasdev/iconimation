@@ -21,13 +21,15 @@ Don't count on anything working correctly.
    
 
     # I definitely need a Lottie that doesn't do anything!
-    $ --codepoint 0xeba8 --font ../material-design-icons/font/MaterialIconsOutlined-Regular.otf --animation still
+    $ cargo run -- --codepoint 0xeba8 --font ../material-design-icons/font/MaterialIconsOutlined-Regular.otf --animation still
 
     # A spin perhaps?
-    $ --codepoint 0xeba8 --font ../material-design-icons/font/MaterialIconsOutlined-Regular.otf --animation twirl
+    $ cargo run -- --codepoint 0xeba8 --font ../material-design-icons/font/MaterialIconsOutlined-Regular.otf --animation twirl-parts
     ```
 
 1. Try it out
-   * https://lottiefiles.github.io/lottie-docs/playground/json_editor/ perhaps
+   * https://lottiefiles.github.io/lottie-docs/playground/json_editor/ perhaps?
+   * To generate a lottie and place it on the copy buffer so you can paste it into ^
+   `$ cargo run -- --codepoint 0xeba8 --font ../material-design-icons/font/MaterialIconsOutlined-Regular.otf --animation twirl-parts && cat output.json | xclip -selection c`
 
    ![Playground](resources/images/playground.png)
