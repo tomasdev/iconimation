@@ -96,7 +96,7 @@ impl Animator for TwirlParts {
 
 fn default_ease() -> BezierEase {
     // If https://lottiefiles.github.io/lottie-docs/playground/json_editor/ is to be believed
-    // the bezier ease is usually required since we rarely want to hold    
+    // the bezier ease is usually required since we rarely want to hold
     BezierEase::_2D(Bezier2d {
         // the control point incoming to destination
         in_value: ControlPoint2d { x: 0.6, y: 1.0 },

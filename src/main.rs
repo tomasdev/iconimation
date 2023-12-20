@@ -45,6 +45,10 @@ struct Args {
     #[arg(long)]
     #[clap(required(true))]
     font: String,
+
+    #[arg(long)]
+    #[clap(default_value = "output.json")]
+    out_file: String,
 }
 
 fn main() {
@@ -76,7 +80,10 @@ fn main() {
         .replace_shape(&font_drawbox, &glyph, args.animation.animator())
         .unwrap();
 
-    let out_file = "output.json";
-    fs::write(&out_file, serde_json::to_string_pretty(&lottie).unwrap()).unwrap();
-    eprintln!("Wrote {out_file:?}");
+    fs::write(
+        &args.out_file,
+        serde_json::to_string_pretty(&lottie).unwrap(),
+    )
+    .unwrap();
+    eprintln!("Wrote {}", args.out_file);
 }
