@@ -2,8 +2,8 @@
 //!
 //! Typically supports both a whole-icon and parts mode where parts animate offset slightly in time.
 
-use bodymovin::properties::Value;
 use bodymovin::properties::{Bezier2d, BezierEase, MultiDimensionalKeyframe, Property};
+use bodymovin::properties::{ControlPoint2d, Value};
 use bodymovin::shapes::{AnyShape, Fill, Group, Shape, Transform};
 use kurbo::{BezPath, Point, Shape as KShape};
 
@@ -23,8 +23,8 @@ pub struct Still;
 impl Animator for Still {
     fn animate(
         &self,
-        start: f64,
-        end: f64,
+        _: f64,
+        _: f64,
         shapes: Vec<(BezPath, Shape)>,
     ) -> Result<Vec<AnyShape>, Error> {
         Ok(shapes
@@ -94,6 +94,15 @@ impl Animator for TwirlParts {
     }
 }
 
+fn default_ease() -> BezierEase {
+    // If https://lottiefiles.github.io/lottie-docs/playground/json_editor/ is to be believed
+    // the bezier ease is usually required since we rarely want to hold
+    BezierEase::_2D(Bezier2d {
+        in_value: ControlPoint2d { x: 0.833, y: 0.833 },
+        out_value: ControlPoint2d { x: 0.167, y: 0.167 },
+    })
+}
+
 fn group_with_transform(shapes: Vec<(BezPath, Shape)>, transform: Transform) -> AnyShape {
     // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
     // says players like to find a transform at the end of a group and having a fill before
@@ -130,12 +139,6 @@ fn center(shapes: &Vec<(BezPath, Shape)>) -> Point {
 fn pulse(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) -> AnyShape {
     assert!(end > start);
 
-    // If https://lottiefiles.github.io/lottie-docs/playground/json_editor/ is to be believed
-    // the bezier ease is fairly required
-    let ease = BezierEase::_2D(Bezier2d {
-        in_value: Default::default(),
-        out_value: Default::default(),
-    });
     let i = shape_idx as f64;
     let mut transform = Transform::default();
 
@@ -150,6 +153,8 @@ fn pulse(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) 
     transform.position = transform.anchor_point.clone();
 
     transform.scale.animated = 1;
+
+    let ease = default_ease();
     transform.scale.value = Value::Animated(vec![
         MultiDimensionalKeyframe {
             start_time: 0.2 * (end - start) * i,
@@ -176,12 +181,6 @@ fn pulse(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) 
 fn twirl(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) -> AnyShape {
     assert!(end > start);
 
-    // If https://lottiefiles.github.io/lottie-docs/playground/json_editor/ is to be believed
-    // the bezier ease is fairly required
-    let ease = BezierEase::_2D(Bezier2d {
-        in_value: Default::default(),
-        out_value: Default::default(),
-    });
     let i = shape_idx as f64;
     let mut transform = Transform::default();
 
@@ -195,13 +194,8 @@ fn twirl(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) 
     };
     transform.position = transform.anchor_point.clone();
 
-    eprintln!(
-        "{i} {} .. {}",
-        0.2 * (end - start) * i,
-        0.2 * (end - start) * (i + 2.0)
-    );
-
     transform.rotation.animated = 1;
+    let ease = default_ease();
     transform.rotation.value = Value::Animated(vec![
         MultiDimensionalKeyframe {
             start_time: 0.2 * (end - start) * i,
