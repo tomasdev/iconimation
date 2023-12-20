@@ -1,24 +1,25 @@
+mod transforms;
+
 use std::{fs, path::Path};
 
-use bodymovin::Bodymovin as Lottie;
-use iconimation::Template;
+use kurbo::{Affine, Rect};
+use bodymovin::{
+    layers,
+    properties,
+    shapes,
+    Bodymovin as Lottie,
+};
+use iconimation::shapes_for_glyph;
 use kurbo::Point;
 use skrifa::{
     raw::{FontRef, TableProvider},
     MetadataProvider,
 };
 
+use crate::transforms::scale_transform;
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let lottie_files: Vec<_> = args
-        .iter()
-        .map(Path::new)
-        .filter(|p| {
-            p.extension()
-                .map(|ext| ext.eq_ignore_ascii_case("json"))
-                .unwrap_or_default()
-        })
-        .collect();
 
     let codepoints: Vec<_> = args
         .iter()
@@ -49,7 +50,7 @@ fn main() {
     let font_bytes = fs::read(font_file).unwrap();
     let font = FontRef::new(&font_bytes).unwrap();
     let upem = font.head().unwrap().units_per_em() as f64;
-    let font_drawbox = (Point::ZERO, Point::new(upem, upem)).into();
+    let font_drawbox: Rect = (Point::ZERO, Point::new(upem, upem)).into();
     let outline_loader = font.outline_glyphs();
 
     let glyphs: Vec<_> = codepoints
@@ -65,20 +66,55 @@ fn main() {
         })
         .collect();
 
-    for lottie_file in lottie_files {
-        let lottie = Lottie::load(lottie_file).unwrap();
-        eprintln!("Parsed {lottie_file:?}");
+    let colors = vec![
+        vec![0.0, 0.0, 255.0],
+        vec![0.0, 255.0, 0.0],
+        vec![255.0, 0.0, 0.0]
+    ];
 
-        for (glyph, cp) in glyphs.iter().zip(codepoints.iter()) {
-            let mut lottie = lottie.clone();
-            lottie.replace_shape(&font_drawbox, &glyph).unwrap();
+    for (glyph, cp) in glyphs.iter().zip(codepoints.iter()) {
+        // Here we should do some sort of `font_units_to_lottie_units` to ensure the animation never overflows the Lottie view box
+        let glyph_shapes = shapes_for_glyph(glyph, Affine::FLIP_Y).unwrap();
 
-            let out_file = format!(
-                "{}-{cp:04x}.json",
-                lottie_file.file_stem().unwrap().to_str().unwrap()
-            );
-            fs::write(&out_file, serde_json::to_string_pretty(&lottie).unwrap()).unwrap();
-            eprintln!("Wrote {out_file:?}");
-        }
+        let layers: Vec<layers::AnyLayer> = glyph_shapes.clone().into_iter()
+        .enumerate()
+        .map(|(i, s)| layers::AnyLayer::Shape(layers::Shape {
+            transform: scale_transform(Some(3 * (i as i16))),
+            in_point: 0.0,
+            out_point: 60.0,
+            start_time: 0.0,
+            stretch: 1.0,
+            mixin: layers::ShapeMixin {
+                shapes: vec![
+                    shapes::AnyShape::Shape(s),
+                    shapes::AnyShape::Fill(shapes::Fill {
+                        // Only for debugging purposes
+                        color: properties::MultiDimensional {
+                            value: properties::Value::Fixed(colors[i % 3].clone()),
+                            expression: None,
+                            index: None
+                        },
+                        ..Default::default()
+                    })
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        })).rev().collect();
+
+        let lottie = Lottie {
+            in_point: 0.0,
+            out_point: 60.0, // 60fps total animation = 1s
+            frame_rate: 60.0,
+            width: 960,
+            height: 960,
+            layers,
+            ..Default::default()
+        };
+
+        let out_file = format!("custom-{cp:04x}.json");
+        fs::write(&out_file, serde_json::to_string_pretty(&lottie).unwrap()).unwrap();
+        eprintln!("Wrote {out_file:?}");
     }
+
 }

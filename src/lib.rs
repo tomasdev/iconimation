@@ -148,6 +148,9 @@ fn pulse(args: (usize, Shape)) -> AnyShape {
 
 /// Simplified version of [Affine2D::rect_to_rect](https://github.com/googlefonts/picosvg/blob/a0bcfade7a60cbd6f47d8bfe65b6d471cee628c0/src/picosvg/svg_transform.py#L216-L263)
 fn font_units_to_lottie_units(font_box: &Rect, lottie_box: &Rect) -> Affine {
+    // println!("font_box is: {:?}", font_box);
+    // println!("lottie_box is: {:?}", lottie_box);
+
     assert!(font_box.width() > 0.0);
     assert!(font_box.height() > 0.0);
     assert!(lottie_box.width() > 0.0);
@@ -196,7 +199,7 @@ fn bez_for_shape(shape: &Shape) -> BezPath {
     path
 }
 
-fn shapes_for_glyph(
+pub fn shapes_for_glyph(
     glyph: &OutlineGlyph,
     font_units_to_lottie_units: Affine,
 ) -> Result<Vec<Shape>, Error> {
