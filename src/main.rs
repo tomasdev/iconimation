@@ -2,15 +2,10 @@ mod transforms;
 
 use std::{fs, path::Path};
 
-use kurbo::{Affine, Rect};
-use bodymovin::{
-    layers,
-    properties,
-    shapes,
-    Bodymovin as Lottie,
-};
+use bodymovin::{layers, properties, shapes, Bodymovin as Lottie};
 use iconimation::shapes_for_glyph;
 use kurbo::Point;
+use kurbo::{Affine, Rect};
 use skrifa::{
     raw::{FontRef, TableProvider},
     MetadataProvider,
@@ -66,41 +61,35 @@ fn main() {
         })
         .collect();
 
-    let colors = vec![
-        vec![0.0, 0.0, 255.0],
-        vec![0.0, 255.0, 0.0],
-        vec![255.0, 0.0, 0.0]
-    ];
-
     for (glyph, cp) in glyphs.iter().zip(codepoints.iter()) {
         // Here we should do some sort of `font_units_to_lottie_units` to ensure the animation never overflows the Lottie view box
         let glyph_shapes = shapes_for_glyph(glyph, Affine::FLIP_Y).unwrap();
 
-        let layers: Vec<layers::AnyLayer> = glyph_shapes.clone().into_iter()
-        .enumerate()
-        .map(|(i, s)| layers::AnyLayer::Shape(layers::Shape {
-            transform: scale_transform(Some(3 * (i as i16))),
-            in_point: 0.0,
-            out_point: 60.0,
-            start_time: 0.0,
-            stretch: 1.0,
-            mixin: layers::ShapeMixin {
-                shapes: vec![
-                    shapes::AnyShape::Shape(s),
-                    shapes::AnyShape::Fill(shapes::Fill {
-                        // Only for debugging purposes
-                        color: properties::MultiDimensional {
-                            value: properties::Value::Fixed(colors[i % 3].clone()),
-                            expression: None,
-                            index: None
-                        },
+        let layers: Vec<layers::AnyLayer> = glyph_shapes
+            .clone()
+            .chunks(2)
+            .into_iter()
+            .enumerate()
+            .map(|(i, ss)| {
+                layers::AnyLayer::Shape(layers::Shape {
+                    transform: scale_transform(Some(3 * (i as i16))),
+                    in_point: 0.0,
+                    out_point: 60.0,
+                    start_time: 0.0,
+                    stretch: 1.0,
+                    mixin: layers::ShapeMixin {
+                        shapes: ss
+                            .into_iter()
+                            .map(|s| shapes::AnyShape::Shape(s.clone()))
+                            .chain([shapes::AnyShape::Fill(shapes::Fill::default())])
+                            .collect(),
                         ..Default::default()
-                    })
-                ],
-                ..Default::default()
-            },
-            ..Default::default()
-        })).rev().collect();
+                    },
+                    ..Default::default()
+                })
+            })
+            .rev()
+            .collect();
 
         let lottie = Lottie {
             in_point: 0.0,
@@ -116,5 +105,4 @@ fn main() {
         fs::write(&out_file, serde_json::to_string_pretty(&lottie).unwrap()).unwrap();
         eprintln!("Wrote {out_file:?}");
     }
-
 }
