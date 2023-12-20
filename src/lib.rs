@@ -75,6 +75,7 @@ impl Template for Lottie {
                 for (i, transform) in insert_at.iter().rev() {
                     let glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?
                         .into_iter()
+                        .enumerate()
                         // TODO: we probably don't *always* want pulse
                         .map(pulse)
                         // .map(|shape| AnyShape::Shape(shape))
@@ -93,7 +94,8 @@ impl Template for Lottie {
     }
 }
 
-fn pulse(shape: Shape) -> AnyShape {
+fn pulse(args: (usize, Shape)) -> AnyShape {
+    let (i, shape) = args;
     // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
     // says players like to find a transform at the end of a group so we'll build our pulse as a group
     // of [shape, pulse]
@@ -116,23 +118,24 @@ fn pulse(shape: Shape) -> AnyShape {
         in_value: Default::default(),
         out_value: Default::default(),
     });
+    let i = i as f64;
     let mut transform = Transform::default();
     transform.scale.animated = 1;
     transform.scale.value = Value::Animated(vec![
         MultiDimensionalKeyframe {
-            start_time: 0.0,
+            start_time: 5.0 * i,
             start_value: Some(vec![100.0, 100.0]),
             bezier: Some(ease.clone()),
             ..Default::default()
         },
         MultiDimensionalKeyframe {
-            start_time: 15.0,
+            start_time: 10.0 + 5.0 * i,
             start_value: Some(vec![150.0, 150.0]),
             bezier: Some(ease.clone()),
             ..Default::default()
         },
         MultiDimensionalKeyframe {
-            start_time: 30.0,
+            start_time: 15.0 + 5.0 * i,
             start_value: Some(vec![100.0, 100.0]),
             bezier: Some(ease),
             ..Default::default()
