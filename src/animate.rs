@@ -195,6 +195,12 @@ fn twirl(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) 
     };
     transform.position = transform.anchor_point.clone();
 
+    eprintln!(
+        "{i} {} .. {}",
+        0.2 * (end - start) * i,
+        0.2 * (end - start) * (i + 2.0)
+    );
+
     transform.rotation.animated = 1;
     transform.rotation.value = Value::Animated(vec![
         MultiDimensionalKeyframe {

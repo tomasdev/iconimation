@@ -123,7 +123,15 @@ impl Template for Lottie {
                 }
                 // reverse because replacing 1:n shifts indices past our own
                 for (i, transform) in insert_at.iter().rev() {
-                    let glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?;
+                    let mut glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?;
+                    glyph_shapes.sort_by_cached_key(|(b, _)| {
+                        let bbox = b.control_box();
+                        (
+                            (bbox.min_y() * 1000.0) as i64,
+                            (bbox.min_x() * 1000.0) as i64,
+                        )
+                    });
+                    eprintln!("Animating {} glyph shapes", glyph_shapes.len());
                     let animated_shapes =
                         animator.animate(layer.in_point, layer.out_point, glyph_shapes)?;
                     placeholder.items.splice(*i..(*i + 1), animated_shapes);
