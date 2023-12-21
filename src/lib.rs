@@ -7,14 +7,14 @@ mod shape_pen;
 use bodymovin::{
     layers::{AnyLayer, ShapeMixin},
     properties::{Property, Value},
-    shapes::{AnyShape, Group, Shape},
+    shapes::{AnyShape, Group, SubPath},
     Bodymovin as Lottie,
 };
 use kurbo::{Affine, BezPath, Rect};
 use skrifa::{instance::Size, OutlineGlyph};
 use write_fonts::pens::TransformPen;
 
-use crate::{animate::Animator, error::Error, shape_pen::ShapePen};
+use crate::{animate::Animator, error::Error, shape_pen::SubPathPen};
 
 pub fn default_template(font_drawbox: &Rect) -> Lottie {
     Lottie {
@@ -96,7 +96,7 @@ impl Template for Lottie {
                 insert_at.clear();
                 for (i, item) in placeholder.items.iter_mut().enumerate() {
                     let lottie_box = match item {
-                        AnyShape::Shape(shape) => Some(bez_for_shape(shape).control_box()),
+                        AnyShape::Shape(shape) => Some(bez_for_subpath(shape).control_box()),
                         AnyShape::Rect(rect) => {
                             let Value::Fixed(pos) = &rect.position.value else {
                                 panic!("Unable to process {rect:#?} position, must be fixed");
@@ -123,7 +123,7 @@ impl Template for Lottie {
                 }
                 // reverse because replacing 1:n shifts indices past our own
                 for (i, transform) in insert_at.iter().rev() {
-                    let mut glyph_shapes: Vec<_> = shapes_for_glyph(glyph, *transform)?;
+                    let mut glyph_shapes: Vec<_> = subpaths_for_glyph(glyph, *transform)?;
                     glyph_shapes.sort_by_cached_key(|(b, _)| {
                         let bbox = b.control_box();
                         (
@@ -177,19 +177,19 @@ fn font_units_to_lottie_units(font_box: &Rect, lottie_box: &Rect) -> Affine {
     )
 }
 
-fn bez_for_shape(shape: &Shape) -> BezPath {
-    let Value::Fixed(shape) = &shape.vertices.value else {
-        panic!("what is {shape:?}");
+fn bez_for_subpath(subpath: &SubPath) -> BezPath {
+    let Value::Fixed(value) = &subpath.vertices.value else {
+        panic!("what is {subpath:?}");
     };
 
     let mut path = BezPath::new();
-    if !shape.vertices.is_empty() {
-        path.move_to(shape.vertices[0]);
+    if !value.vertices.is_empty() {
+        path.move_to(value.vertices[0]);
     }
-    for (start_end, (c0, c1)) in shape
+    for (start_end, (c0, c1)) in value
         .vertices
         .windows(2)
-        .zip(shape.in_point.iter().zip(shape.out_point.iter()))
+        .zip(value.in_point.iter().zip(value.out_point.iter()))
     {
         let end = start_end[1];
         path.curve_to(*c0, *c1, end);
@@ -198,10 +198,10 @@ fn bez_for_shape(shape: &Shape) -> BezPath {
 }
 
 /// Returns a [Shape] and [BezPath] in Lottie units for each subpath of a glyph
-fn shapes_for_glyph(
+fn subpaths_for_glyph(
     glyph: &OutlineGlyph,
     font_units_to_lottie_units: Affine,
-) -> Result<Vec<(BezPath, Shape)>, Error> {
+) -> Result<Vec<(BezPath, SubPath)>, Error> {
     // Fonts draw Y-up, Lottie Y-down. The transform to transition should be negative determinant.
     // Normally a negative determinant flips curve direction but since we're also moving
     // to a coordinate system with Y flipped it should cancel out.
@@ -210,13 +210,13 @@ fn shapes_for_glyph(
         "We assume a negative determinant"
     );
 
-    let mut shape_pen = ShapePen::default();
-    let mut transform_pen = TransformPen::new(&mut shape_pen, font_units_to_lottie_units);
+    let mut subpath_pen = SubPathPen::default();
+    let mut transform_pen = TransformPen::new(&mut subpath_pen, font_units_to_lottie_units);
     glyph
         .draw(Size::unscaled(), &mut transform_pen)
         .map_err(Error::DrawError)?;
 
-    Ok(shape_pen.to_shapes())
+    Ok(subpath_pen.to_shapes())
 }
 
 #[cfg(test)]

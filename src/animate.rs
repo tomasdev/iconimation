@@ -4,8 +4,8 @@
 
 use bodymovin::properties::{Bezier2d, BezierEase, MultiDimensionalKeyframe, Property};
 use bodymovin::properties::{ControlPoint2d, Value};
-use bodymovin::shapes::{AnyShape, Fill, Group, Shape, Transform};
-use kurbo::{BezPath, Point, Shape as KShape};
+use bodymovin::shapes::{AnyShape, Fill, Group, SubPath, Transform};
+use kurbo::{BezPath, Point, Shape};
 
 use crate::Error;
 
@@ -14,7 +14,7 @@ pub trait Animator {
         &self,
         start: f64,
         end: f64,
-        shapes: Vec<(BezPath, Shape)>,
+        shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error>;
 }
 
@@ -25,7 +25,7 @@ impl Animator for Still {
         &self,
         _: f64,
         _: f64,
-        shapes: Vec<(BezPath, Shape)>,
+        shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error> {
         Ok(shapes
             .into_iter()
@@ -41,7 +41,7 @@ impl Animator for Pulse {
         &self,
         start: f64,
         end: f64,
-        shapes: Vec<(BezPath, Shape)>,
+        shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error> {
         Ok(vec![pulse(start, end, 0, shapes)])
     }
@@ -54,7 +54,7 @@ impl Animator for PulseParts {
         &self,
         start: f64,
         end: f64,
-        shapes: Vec<(BezPath, Shape)>,
+        shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error> {
         Ok(shapes
             .into_iter()
@@ -71,7 +71,7 @@ impl Animator for Twirl {
         &self,
         start: f64,
         end: f64,
-        shapes: Vec<(BezPath, Shape)>,
+        shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error> {
         Ok(vec![twirl(start, end, 0, shapes)])
     }
@@ -84,7 +84,7 @@ impl Animator for TwirlParts {
         &self,
         start: f64,
         end: f64,
-        shapes: Vec<(BezPath, Shape)>,
+        shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error> {
         Ok(shapes
             .into_iter()
@@ -105,7 +105,7 @@ fn default_ease() -> BezierEase {
     })
 }
 
-fn group_with_transform(shapes: Vec<(BezPath, Shape)>, transform: Transform) -> AnyShape {
+fn group_with_transform(shapes: Vec<(BezPath, SubPath)>, transform: Transform) -> AnyShape {
     // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
     // says players like to find a transform at the end of a group and having a fill before
     // the transform seems fairly ubiquotous so we'll build our pulse as a group
@@ -129,7 +129,7 @@ fn group_with_transform(shapes: Vec<(BezPath, Shape)>, transform: Transform) -> 
     AnyShape::Group(group)
 }
 
-fn center(shapes: &Vec<(BezPath, Shape)>) -> Point {
+fn center(shapes: &Vec<(BezPath, SubPath)>) -> Point {
     shapes
         .iter()
         .map(|(b, _)| b.bounding_box())
@@ -138,7 +138,7 @@ fn center(shapes: &Vec<(BezPath, Shape)>) -> Point {
         .unwrap_or_default()
 }
 
-fn pulse(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) -> AnyShape {
+fn pulse(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, SubPath)>) -> AnyShape {
     assert!(end > start);
 
     let i = shape_idx as f64;
@@ -180,7 +180,7 @@ fn pulse(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) 
     group_with_transform(shapes, transform)
 }
 
-fn twirl(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, Shape)>) -> AnyShape {
+fn twirl(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, SubPath)>) -> AnyShape {
     assert!(end > start);
 
     let i = shape_idx as f64;

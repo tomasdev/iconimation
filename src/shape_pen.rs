@@ -4,17 +4,17 @@
 
 use bodymovin::{
     properties::{Property, ShapeValue, Value},
-    shapes::Shape,
+    shapes::SubPath,
 };
 use kurbo::{BezPath, Point};
 use skrifa::outline::OutlinePen;
 
 #[derive(Default)]
-pub struct ShapePen {
+pub struct SubPathPen {
     paths: Vec<BezPath>,
 }
 
-impl ShapePen {
+impl SubPathPen {
     fn active_subpath(&mut self) -> &mut BezPath {
         if self.paths.is_empty() {
             self.paths.push(BezPath::new());
@@ -22,7 +22,7 @@ impl ShapePen {
         return self.paths.last_mut().unwrap();
     }
 
-    pub fn to_shapes(self) -> Vec<(BezPath, Shape)> {
+    pub fn to_shapes(self) -> Vec<(BezPath, SubPath)> {
         self.paths
             .into_iter()
             .map(|b| {
@@ -33,7 +33,7 @@ impl ShapePen {
     }
 }
 
-impl OutlinePen for ShapePen {
+impl OutlinePen for SubPathPen {
     fn move_to(&mut self, x: f32, y: f32) {
         self.paths.push(BezPath::new());
         self.active_subpath().move_to((x as f64, y as f64));
@@ -105,38 +105,38 @@ fn add_cubic(shape: &mut ShapeValue, c0: Point, c1: Point, end: Point) {
     shape.vertices.push(end.into());
 }
 
-fn bez_to_shape(path: &BezPath) -> Shape {
+fn bez_to_shape(path: &BezPath) -> SubPath {
     eprintln!("bez to shape, cbox {:?}", path.control_box());
 
-    let mut vertices = ShapeValue::default();
+    let mut value = ShapeValue::default();
     for el in path.iter() {
-        let last_on: Point = vertices.vertices.last().cloned().unwrap_or_default().into();
+        let last_on: Point = value.vertices.last().cloned().unwrap_or_default().into();
         match el {
             kurbo::PathEl::MoveTo(p) => {
-                vertices.vertices.push(p.into());
-                vertices.out_point.push(Point::ZERO.into());
-                vertices.in_point.push(Point::ZERO.into());
+                value.vertices.push(p.into());
+                value.out_point.push(Point::ZERO.into());
+                value.in_point.push(Point::ZERO.into());
             }
-            kurbo::PathEl::LineTo(p) => add_cubic(&mut vertices, last_on, p.into(), p.into()),
+            kurbo::PathEl::LineTo(p) => add_cubic(&mut value, last_on, p.into(), p.into()),
             kurbo::PathEl::QuadTo(control, end) => {
                 // https://pomax.github.io/bezierinfo/#reordering
                 let c0 = last_on.one_third() + control.two_thirds().to_vec2();
                 let c1 = control.two_thirds() + end.one_third().to_vec2();
-                add_cubic(&mut vertices, c0, c1, end);
+                add_cubic(&mut value, c0, c1, end);
             }
-            kurbo::PathEl::CurveTo(c0, c1, end) => add_cubic(&mut vertices, c0, c1, end),
-            kurbo::PathEl::ClosePath => vertices.closed = Some(true),
+            kurbo::PathEl::CurveTo(c0, c1, end) => add_cubic(&mut value, c0, c1, end),
+            kurbo::PathEl::ClosePath => value.closed = Some(true),
         }
     }
-    if vertices.closed.is_none() {
-        vertices.closed = Some(
-            vertices.vertices.first().cloned().unwrap_or_default()
-                == vertices.vertices.last().cloned().unwrap_or_default(),
+    if value.closed.is_none() {
+        value.closed = Some(
+            value.vertices.first().cloned().unwrap_or_default()
+                == value.vertices.last().cloned().unwrap_or_default(),
         );
     }
-    Shape {
+    SubPath {
         vertices: Property {
-            value: Value::Fixed(vertices),
+            value: Value::Fixed(value),
             ..Default::default()
         },
         ..Default::default()
