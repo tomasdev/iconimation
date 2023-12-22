@@ -12,27 +12,6 @@ use skrifa::{
     MetadataProvider,
 };
 
-#[derive(clap::ValueEnum, Clone, Debug)]
-pub enum Animation {
-    Still,
-    PulseWhole,
-    PulseParts,
-    TwirlWhole,
-    TwirlParts,
-}
-
-impl Animation {
-    fn animator(&self) -> Box<dyn Animator> {
-        match self {
-            Animation::Still => Box::new(animate::Still),
-            Animation::PulseWhole => Box::new(animate::Pulse),
-            Animation::PulseParts => Box::new(animate::PulseParts),
-            Animation::TwirlWhole => Box::new(animate::Twirl),
-            Animation::TwirlParts => Box::new(animate::TwirlParts),
-        }
-    }
-}
-
 #[derive(Parser)]
 struct Args {
     #[clap(value_enum, required(true))]
