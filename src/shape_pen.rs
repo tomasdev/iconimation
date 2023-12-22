@@ -6,7 +6,7 @@ use bodymovin::{
     properties::{Property, ShapeValue, Value},
     shapes::SubPath,
 };
-use kurbo::{BezPath, Point};
+use kurbo::{BezPath, Point, Shape as KShape};
 use skrifa::outline::OutlinePen;
 
 #[derive(Default)]
@@ -138,6 +138,13 @@ fn bez_to_shape(path: &BezPath) -> SubPath {
         vertices: Property {
             value: Value::Fixed(value),
             ..Default::default()
+        },
+        // 1.0 = Clockwise = positive area
+        // 3.0 = Counter-Clockwise = negative area
+        direction: if path.area() > 0.0 {
+            Some(1.0)
+        } else {
+            Some(3.0)
         },
         ..Default::default()
     }

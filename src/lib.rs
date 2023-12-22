@@ -4,14 +4,19 @@ pub mod animate;
 pub mod error;
 mod shape_pen;
 
+use animate::Animation;
 use bodymovin::{
     layers::{AnyLayer, ShapeMixin},
     properties::{Property, Value},
     shapes::{AnyShape, Group, SubPath},
     Bodymovin as Lottie,
 };
-use kurbo::{Affine, BezPath, Rect};
-use skrifa::{instance::Size, OutlineGlyph};
+use kurbo::{Affine, BezPath, Point, Rect};
+use skrifa::{
+    instance::Size,
+    raw::{FontRef, TableProvider},
+    OutlineGlyph,
+};
 use write_fonts::pens::TransformPen;
 
 use crate::{animate::Animator, error::Error, shape_pen::SubPathPen};
@@ -217,6 +222,22 @@ fn subpaths_for_glyph(
         .map_err(Error::DrawError)?;
 
     Ok(subpath_pen.to_shapes())
+}
+
+pub fn lottie_for_glyph(
+    font: FontRef<'_>,
+    glyph: OutlineGlyph<'_>,
+    animation: Animation,
+) -> String {
+    let upem = font.head().unwrap().units_per_em() as f64;
+    let font_drawbox: Rect = (Point::ZERO, Point::new(upem, upem)).into();
+
+    let mut lottie = default_template(&font_drawbox);
+    lottie
+        .replace_shape(&font_drawbox, &glyph, animation.animator())
+        .unwrap();
+
+    serde_json::to_string_pretty(&lottie).unwrap()
 }
 
 #[cfg(test)]

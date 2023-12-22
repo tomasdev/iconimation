@@ -9,6 +9,27 @@ use kurbo::{BezPath, Point, Shape};
 
 use crate::Error;
 
+#[derive(Clone, Debug)]
+pub enum Animation {
+    Still,
+    PulseWhole,
+    PulseParts,
+    TwirlWhole,
+    TwirlParts,
+}
+
+impl Animation {
+    pub fn animator(&self) -> Box<dyn Animator> {
+        match self {
+            Animation::Still => Box::new(Still),
+            Animation::PulseWhole => Box::new(Pulse),
+            Animation::PulseParts => Box::new(PulseParts),
+            Animation::TwirlWhole => Box::new(Twirl),
+            Animation::TwirlParts => Box::new(TwirlParts),
+        }
+    }
+}
+
 pub trait Animator {
     fn animate(
         &self,
@@ -56,7 +77,7 @@ impl Animator for PulseParts {
         end: f64,
         shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error> {
-        Ok(shape_groups_for_piecewise_animation(shapes)
+        Ok(group_per_direction(shapes)
             .into_iter()
             .enumerate()
             .map(|(i, s)| pulse(start, end, i, s))
@@ -86,54 +107,12 @@ impl Animator for TwirlParts {
         end: f64,
         shapes: Vec<(BezPath, SubPath)>,
     ) -> Result<Vec<AnyShape>, Error> {
-        Ok(shape_groups_for_piecewise_animation(shapes)
+        Ok(group_per_direction(shapes)
             .into_iter()
             .enumerate()
             .map(|(i, s)| twirl(start, end, i, s))
             .collect())
     }
-}
-
-/// Piecewise animation has to keep cw and ccw (hole cutting) paths together if doing so alters rendering.
-///
-/// This implementation is quick and dirty: group shapes with overlapping bbox and keep groups together
-/// if they contain both positive and negative area (e.g. cw and ccw shapes). This will over-group; shapes
-/// whoses bounding box overlaps that don't impact one anothers rendering will be grouped.
-fn shape_groups_for_piecewise_animation(
-    mut shapes: Vec<(BezPath, SubPath)>,
-) -> Vec<Vec<(BezPath, SubPath)>> {
-    let num_shapes = shapes.len();
-    let mut groups: Vec<Vec<(BezPath, SubPath)>> = Vec::new();
-
-    // icons have very few shapes, no need to stress efficiency
-    while let Some((bez, subpath)) = shapes.pop() {
-        // find every group that contains a shape whose bounding box we intersect
-        let indices: Vec<_> = groups
-            .iter()
-            .enumerate()
-            .filter_map(|(i, g)| {
-                g.iter()
-                    .any(|(bez2, _)| {
-                        bez.bounding_box().intersect(bez2.bounding_box()).area() != 0.0
-                    })
-                    .then(|| i)
-            })
-            .collect();
-
-        if let Some(merge_into_idx) = indices.first().cloned() {
-            // if anything matched, merge those groups and add us
-            for idx in indices.into_iter().rev().filter(|i| *i != merge_into_idx) {
-                let merge_me = groups.remove(idx);
-                groups[merge_into_idx].extend(merge_me);
-            }
-            groups[merge_into_idx].push((bez, subpath));
-        } else {
-            // we're a new group
-            groups.push(vec![(bez, subpath)]);
-        }
-    }
-    eprintln!("{} groups from {} shapes", groups.len(), num_shapes);
-    groups
 }
 
 fn default_ease() -> BezierEase {
@@ -145,6 +124,32 @@ fn default_ease() -> BezierEase {
         // the control point outgoing from origin
         out_value: ControlPoint2d { x: 0.4, y: 0.0 },
     })
+}
+
+/// This assumes the order of cw and ccw shapes carries meaning I believe it does not.
+/// Still a step forward.
+fn group_per_direction(shapes: Vec<(BezPath, SubPath)>) -> Vec<Vec<(BezPath, SubPath)>> {
+    let mut result: Vec<Vec<(BezPath, SubPath)>> = vec![];
+
+    for shape in shapes.into_iter() {
+        if let Some(vec) = result.last_mut() {
+            let last = vec.last().expect("Missing path");
+            let dir1 = last.1.direction.expect("Missing previous path direction");
+            let dir2 = shape.1.direction.expect("Missing current path direction");
+            if dir1 == dir2 {
+                // Same direction, new group
+                result.push(vec![shape]);
+            } else {
+                // Different direction, reuse group
+                vec.push(shape);
+            }
+        } else {
+            // First item, new group
+            result.push(vec![shape]);
+        }
+    }
+
+    result
 }
 
 fn group_with_transform(shapes: Vec<(BezPath, SubPath)>, transform: Transform) -> AnyShape {
