@@ -9,6 +9,27 @@ use kurbo::{BezPath, Point, Shape};
 
 use crate::Error;
 
+#[derive(Clone, Debug)]
+pub enum Animation {
+    Still,
+    PulseWhole,
+    PulseParts,
+    TwirlWhole,
+    TwirlParts,
+}
+
+impl Animation {
+    pub fn animator(&self) -> Box<dyn Animator> {
+        match self {
+            Animation::Still => Box::new(Still),
+            Animation::PulseWhole => Box::new(Pulse),
+            Animation::PulseParts => Box::new(PulseParts),
+            Animation::TwirlWhole => Box::new(Twirl),
+            Animation::TwirlParts => Box::new(TwirlParts),
+        }
+    }
+}
+
 pub trait Animator {
     fn animate(
         &self,
@@ -94,48 +115,6 @@ impl Animator for TwirlParts {
     }
 }
 
-/// Piecewise animation has to keep cw and ccw (hole cutting) paths together if doing so alters rendering.
-///
-/// This implementation is quick and dirty: group shapes with overlapping bbox and keep groups together
-/// if they contain both positive and negative area (e.g. cw and ccw shapes). This will over-group; shapes
-/// whoses bounding box overlaps that don't impact one anothers rendering will be grouped.
-fn shape_groups_for_piecewise_animation(
-    mut shapes: Vec<(BezPath, SubPath)>,
-) -> Vec<Vec<(BezPath, SubPath)>> {
-    let num_shapes = shapes.len();
-    let mut groups: Vec<Vec<(BezPath, SubPath)>> = Vec::new();
-
-    // icons have very few shapes, no need to stress efficiency
-    while let Some((bez, subpath)) = shapes.pop() {
-        // find every group that contains a shape whose bounding box we intersect
-        let indices: Vec<_> = groups
-            .iter()
-            .enumerate()
-            .filter_map(|(i, g)| {
-                g.iter()
-                    .any(|(bez2, _)| {
-                        bez.bounding_box().intersect(bez2.bounding_box()).area() != 0.0
-                    })
-                    .then(|| i)
-            })
-            .collect();
-
-        if let Some(merge_into_idx) = indices.first().cloned() {
-            // if anything matched, merge those groups and add us
-            for idx in indices.into_iter().rev().filter(|i| *i != merge_into_idx) {
-                let merge_me = groups.remove(idx);
-                groups[merge_into_idx].extend(merge_me);
-            }
-            groups[merge_into_idx].push((bez, subpath));
-        } else {
-            // we're a new group
-            groups.push(vec![(bez, subpath)]);
-        }
-    }
-    eprintln!("{} groups from {} shapes", groups.len(), num_shapes);
-    groups
-}
-
 fn default_ease() -> BezierEase {
     // If https://lottiefiles.github.io/lottie-docs/playground/json_editor/ is to be believed
     // the bezier ease is usually required since we rarely want to hold
@@ -147,8 +126,10 @@ fn default_ease() -> BezierEase {
     })
 }
 
-fn group_per_direction(shapes: Vec<(BezPath, Shape)>) -> Vec<Vec<(BezPath, Shape)>> {
-    let mut result: Vec<Vec<(BezPath, Shape)>> = vec![];
+/// This assumes the order of cw and ccw shapes carries meaning I believe it does not.
+/// Still a step forward.
+fn group_per_direction(shapes: Vec<(BezPath, SubPath)>) -> Vec<Vec<(BezPath, SubPath)>> {
+    let mut result: Vec<Vec<(BezPath, SubPath)>> = vec![];
 
     for shape in shapes.into_iter() {
         if let Some(vec) = result.last_mut() {
@@ -171,7 +152,7 @@ fn group_per_direction(shapes: Vec<(BezPath, Shape)>) -> Vec<Vec<(BezPath, Shape
     result
 }
 
-fn group_with_transform(shapes: Vec<(BezPath, Shape)>, transform: Transform) -> AnyShape {
+fn group_with_transform(shapes: Vec<(BezPath, SubPath)>, transform: Transform) -> AnyShape {
     // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
     // says players like to find a transform at the end of a group and having a fill before
     // the transform seems fairly ubiquotous so we'll build our pulse as a group

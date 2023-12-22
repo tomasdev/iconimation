@@ -4,13 +4,13 @@ pub mod animate;
 pub mod error;
 mod shape_pen;
 
+use animate::Animation;
 use bodymovin::{
     layers::{AnyLayer, ShapeMixin},
     properties::{Property, Value},
     shapes::{AnyShape, Group, SubPath},
     Bodymovin as Lottie,
 };
-use clap::ValueEnum;
 use kurbo::{Affine, BezPath, Point, Rect};
 use skrifa::{
     instance::Size,
@@ -20,27 +20,6 @@ use skrifa::{
 use write_fonts::pens::TransformPen;
 
 use crate::{animate::Animator, error::Error, shape_pen::SubPathPen};
-
-#[derive(ValueEnum, Clone, Debug)]
-pub enum Animation {
-    Still,
-    PulseWhole,
-    PulseParts,
-    TwirlWhole,
-    TwirlParts,
-}
-
-impl Animation {
-    fn animator(&self) -> Box<dyn Animator> {
-        match self {
-            Animation::Still => Box::new(animate::Still),
-            Animation::PulseWhole => Box::new(animate::Pulse),
-            Animation::PulseParts => Box::new(animate::PulseParts),
-            Animation::TwirlWhole => Box::new(animate::Twirl),
-            Animation::TwirlParts => Box::new(animate::TwirlParts),
-        }
-    }
-}
 
 pub fn default_template(font_drawbox: &Rect) -> Lottie {
     Lottie {
@@ -245,17 +224,17 @@ fn subpaths_for_glyph(
     Ok(subpath_pen.to_shapes())
 }
 
-pub fn lottie_for_glyph(font: FontRef<'_>, glyph: OutlineGlyph<'_>, animation: &str) -> String {
+pub fn lottie_for_glyph(
+    font: FontRef<'_>,
+    glyph: OutlineGlyph<'_>,
+    animation: Animation,
+) -> String {
     let upem = font.head().unwrap().units_per_em() as f64;
     let font_drawbox: Rect = (Point::ZERO, Point::new(upem, upem)).into();
 
     let mut lottie = default_template(&font_drawbox);
     lottie
-        .replace_shape(
-            &font_drawbox,
-            &glyph,
-            Animation::from_str(animation, true).unwrap().animator(),
-        )
+        .replace_shape(&font_drawbox, &glyph, animation.animator())
         .unwrap();
 
     serde_json::to_string_pretty(&lottie).unwrap()

@@ -1,8 +1,8 @@
 use std::{fs, path::Path};
 
 use clap::Parser;
-use iconimation::animate;
-use iconimation::animate::Animator;
+use clap::ValueEnum;
+use iconimation::animate::Animation;
 use iconimation::default_template;
 use iconimation::Template;
 use kurbo::Point;
@@ -12,11 +12,33 @@ use skrifa::{
     MetadataProvider,
 };
 
+/// Clap-friendly version of [Animation]
+#[derive(ValueEnum, Clone, Debug)]
+pub enum CliAnimation {
+    Still,
+    PulseWhole,
+    PulseParts,
+    TwirlWhole,
+    TwirlParts,
+}
+
+impl CliAnimation {
+    fn to_lib(&self) -> Animation {
+        match self {
+            CliAnimation::Still => Animation::Still,
+            CliAnimation::PulseWhole => Animation::PulseWhole,
+            CliAnimation::PulseParts => Animation::PulseParts,
+            CliAnimation::TwirlWhole => Animation::TwirlWhole,
+            CliAnimation::TwirlParts => Animation::TwirlParts,
+        }
+    }
+}
+
 #[derive(Parser)]
 struct Args {
     #[clap(value_enum, required(true))]
     #[arg(long)]
-    animation: Animation,
+    animation: CliAnimation,
 
     #[arg(long)]
     codepoint: String,
@@ -54,9 +76,11 @@ fn main() {
         .get(gid)
         .unwrap_or_else(|| panic!("No outline for 0x{codepoint:04x} (gid {gid})"));
 
+    let animation = args.animation.to_lib();
+
     let mut lottie = default_template(&font_drawbox);
     lottie
-        .replace_shape(&font_drawbox, &glyph, args.animation.animator())
+        .replace_shape(&font_drawbox, &glyph, animation.animator())
         .unwrap();
 
     fs::write(
