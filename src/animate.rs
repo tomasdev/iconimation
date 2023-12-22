@@ -56,10 +56,10 @@ impl Animator for PulseParts {
         end: f64,
         shapes: Vec<(BezPath, Shape)>,
     ) -> Result<Vec<AnyShape>, Error> {
-        Ok(shapes
+        Ok(group_per_direction(shapes)
             .into_iter()
             .enumerate()
-            .map(|(i, s)| pulse(start, end, i, vec![s]))
+            .map(|(i, s)| pulse(start, end, i, s))
             .collect())
     }
 }
@@ -86,10 +86,10 @@ impl Animator for TwirlParts {
         end: f64,
         shapes: Vec<(BezPath, Shape)>,
     ) -> Result<Vec<AnyShape>, Error> {
-        Ok(shapes
+        Ok(group_per_direction(shapes)
             .into_iter()
             .enumerate()
-            .map(|(i, s)| twirl(start, end, i, vec![s]))
+            .map(|(i, s)| twirl(start, end, i, s))
             .collect())
     }
 }
@@ -103,6 +103,30 @@ fn default_ease() -> BezierEase {
         // the control point outgoing from origin
         out_value: ControlPoint2d { x: 0.4, y: 0.0 },
     })
+}
+
+fn group_per_direction(shapes: Vec<(BezPath, Shape)>) -> Vec<Vec<(BezPath, Shape)>> {
+    let mut result: Vec<Vec<(BezPath, Shape)>> = vec![];
+
+    for shape in shapes.into_iter() {
+        if let Some(vec) = result.last_mut() {
+            let last = vec.last().expect("Missing path");
+            let dir1 = last.1.direction.expect("Missing previous path direction");
+            let dir2 = shape.1.direction.expect("Missing current path direction");
+            if dir1 == dir2 {
+                // Same direction, new group
+                result.push(vec![shape]);
+            } else {
+                // Different direction, reuse group
+                vec.push(shape);
+            }
+        } else {
+            // First item, new group
+            result.push(vec![shape]);
+        }
+    }
+
+    result
 }
 
 fn group_with_transform(shapes: Vec<(BezPath, Shape)>, transform: Transform) -> AnyShape {
