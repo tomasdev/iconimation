@@ -18,3 +18,9 @@ demo/
 # Added by cargo
 
 /target
+
+# MacOS hidden files
+.DS_Store
+
+# Generated files
+output.json
