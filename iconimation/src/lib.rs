@@ -9,6 +9,7 @@ use bodymovin::{
     layers::{AnyLayer, ShapeMixin},
     properties::{Property, Value},
     shapes::{AnyShape, Group, SubPath},
+    sources::Asset,
     Bodymovin as Lottie,
 };
 use kurbo::{Affine, BezPath, Rect};
@@ -68,6 +69,80 @@ pub trait Template {
     ) -> Result<(), Error>;
 }
 
+fn replace_placeholders(
+    layers: &mut Vec<AnyLayer>,
+    font_drawbox: &Rect,
+    glyph: &OutlineGlyph,
+    animator: &Box<dyn Animator>,
+) -> Result<usize, Error> {
+    let mut shapes_updated = 0;
+    for layer in layers.iter_mut() {
+        let AnyLayer::Shape(layer) = layer else {
+            continue;
+        };
+        let placeholders: Vec<_> = layer
+            .mixin
+            .shapes
+            .iter_mut()
+            .filter_map(|any| match any {
+                AnyShape::Group(group) if group.name.as_deref() == Some("placeholder") => {
+                    Some(group)
+                }
+                _ => None,
+            })
+            .collect();
+
+        let mut insert_at = Vec::with_capacity(1);
+        for placeholder in placeholders {
+            insert_at.clear();
+            for (i, item) in placeholder.items.iter_mut().enumerate() {
+                let lottie_box = match item {
+                    AnyShape::Shape(shape) => Some(bez_for_subpath(shape).control_box()),
+                    AnyShape::Rect(rect) => {
+                        let Value::Fixed(pos) = &rect.position.value else {
+                            panic!("Unable to process {rect:#?} position, must be fixed");
+                        };
+                        let Value::Fixed(size) = &rect.size.value else {
+                            panic!("Unable to process {rect:#?} size, must be fixed");
+                        };
+                        assert_eq!(2, pos.len());
+                        assert_eq!(2, size.len());
+                        Some(Rect {
+                            x0: pos[0],
+                            y0: pos[1],
+                            x1: size[0],
+                            y1: size[1],
+                        })
+                    }
+                    _ => None,
+                };
+                let Some(lottie_box) = lottie_box else {
+                    continue;
+                };
+                let font_to_lottie = font_units_to_lottie_units(font_drawbox, &lottie_box);
+                insert_at.push((i, font_to_lottie));
+            }
+            // reverse because replacing 1:n shifts indices past our own
+            for (i, transform) in insert_at.iter().rev() {
+                let mut glyph_shapes: Vec<_> = subpaths_for_glyph(glyph, *transform)?;
+                glyph_shapes.sort_by_cached_key(|(b, _)| {
+                    let bbox = b.control_box();
+                    (
+                        (bbox.min_y() * 1000.0) as i64,
+                        (bbox.min_x() * 1000.0) as i64,
+                    )
+                });
+                eprintln!("Animating {} glyph shapes", glyph_shapes.len());
+                let animated_shapes =
+                    animator.animate(layer.in_point, layer.out_point, glyph_shapes)?;
+                placeholder.items.splice(*i..(*i + 1), animated_shapes);
+            }
+            shapes_updated += insert_at.len();
+        }
+    }
+    Ok(shapes_updated)
+}
+
 impl Template for Lottie {
     fn replace_shape(
         &mut self,
@@ -75,74 +150,18 @@ impl Template for Lottie {
         glyph: &OutlineGlyph,
         animator: Box<dyn Animator>,
     ) -> Result<(), Error> {
-        for layer in self.layers.iter_mut() {
-            let AnyLayer::Shape(layer) = layer else {
-                continue;
-            };
-            let mut shapes_updated = 0;
-            let placeholders: Vec<_> = layer
-                .mixin
-                .shapes
-                .iter_mut()
-                .filter_map(|any| match any {
-                    AnyShape::Group(group) if group.name.as_deref() == Some("placeholder") => {
-                        Some(group)
-                    }
-                    _ => None,
-                })
-                .collect();
-
-            let mut insert_at = Vec::with_capacity(1);
-            for placeholder in placeholders {
-                insert_at.clear();
-                for (i, item) in placeholder.items.iter_mut().enumerate() {
-                    let lottie_box = match item {
-                        AnyShape::Shape(shape) => Some(bez_for_subpath(shape).control_box()),
-                        AnyShape::Rect(rect) => {
-                            let Value::Fixed(pos) = &rect.position.value else {
-                                panic!("Unable to process {rect:#?} position, must be fixed");
-                            };
-                            let Value::Fixed(size) = &rect.size.value else {
-                                panic!("Unable to process {rect:#?} size, must be fixed");
-                            };
-                            assert_eq!(2, pos.len());
-                            assert_eq!(2, size.len());
-                            Some(Rect {
-                                x0: pos[0],
-                                y0: pos[1],
-                                x1: size[0],
-                                y1: size[1],
-                            })
-                        }
-                        _ => None,
-                    };
-                    let Some(lottie_box) = lottie_box else {
-                        continue;
-                    };
-                    let font_to_lottie = font_units_to_lottie_units(font_drawbox, &lottie_box);
-                    insert_at.push((i, font_to_lottie));
+        let mut shapes_updated =
+            replace_placeholders(&mut self.layers, font_drawbox, glyph, &animator)?;
+        for asset in self.assets.iter_mut() {
+            shapes_updated += match asset {
+                Asset::PreComp(precomp) => {
+                    replace_placeholders(&mut precomp.layers, font_drawbox, glyph, &animator)?
                 }
-                // reverse because replacing 1:n shifts indices past our own
-                for (i, transform) in insert_at.iter().rev() {
-                    let mut glyph_shapes: Vec<_> = subpaths_for_glyph(glyph, *transform)?;
-                    glyph_shapes.sort_by_cached_key(|(b, _)| {
-                        let bbox = b.control_box();
-                        (
-                            (bbox.min_y() * 1000.0) as i64,
-                            (bbox.min_x() * 1000.0) as i64,
-                        )
-                    });
-                    eprintln!("Animating {} glyph shapes", glyph_shapes.len());
-                    let animated_shapes =
-                        animator.animate(layer.in_point, layer.out_point, glyph_shapes)?;
-                    placeholder.items.splice(*i..(*i + 1), animated_shapes);
-                }
-                shapes_updated += insert_at.len();
+                Asset::Image(..) => 0,
             }
-
-            if shapes_updated == 0 {
-                panic!("No placeholders replaced!!");
-            }
+        }
+        if shapes_updated == 0 {
+            return Err(Error::NoShapesUpdated);
         }
         Ok(())
     }

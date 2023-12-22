@@ -6,13 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-write-fonts = "0.21.0"  # pens
-# should be a clone of https://github.com/rsheeter/bodymovin-rs
-bodymovin = { path = "../../bodymovin-rs" }
-
 kurbo.workspace = true
 skrifa.workspace = true
+bodymovin.workspace = true
 
-ordered-float = "4.2"
+write-fonts = "0.21.0"  # pens
 
 thiserror = "1.0"
+
+ordered-float = "4.2"
