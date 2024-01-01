@@ -1,10 +1,10 @@
 # Chosen to represent a variety of cases
-check e5ca
-menu e5d2
-logout e9ba
-select_all e162
-amend f802
-target e719
+#check e5ca
+#menu e5d2
+#logout e9ba
+#select_all e162
+#amend f802
+#target e719
 type_specimen f8f0
-assignment_add f848
-filter_list_off eb57
+#assignment_add f848
+#filter_list_off eb57

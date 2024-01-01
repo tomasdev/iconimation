@@ -3,10 +3,12 @@ use std::{fs, path::Path};
 use clap::Parser;
 use clap::ValueEnum;
 use iconimation::animate::Animation;
+use iconimation::debug_pen::DebugPen;
 use iconimation::default_template;
 use iconimation::Template;
 use kurbo::Point;
 use kurbo::Rect;
+use skrifa::instance::Size;
 use skrifa::{
     raw::{FontRef, TableProvider},
     MetadataProvider,
@@ -36,6 +38,10 @@ impl CliAnimation {
 
 #[derive(Parser)]
 struct Args {
+    /// Whether to emit additional debug info
+    #[arg(long)]
+    debug: bool,
+
     #[clap(value_enum, required(true))]
     #[arg(long)]
     animation: CliAnimation,
@@ -75,6 +81,14 @@ fn main() {
     let glyph = outline_loader
         .get(gid)
         .unwrap_or_else(|| panic!("No outline for 0x{codepoint:04x} (gid {gid})"));
+
+    if args.debug {
+        let mut pen = DebugPen::new(Rect::new(0.0, 0.0, upem, upem));
+        glyph.draw(Size::unscaled(), &mut pen).unwrap();
+        let debug_out = Path::new(&args.out_file).with_extension("svg");
+        fs::write(&debug_out, pen.to_svg()).unwrap();
+        eprintln!("Wrote debug svg {}", args.out_file);
+    }
 
     let animation = args.animation.to_lib();
 

@@ -1,6 +1,7 @@
 //! Shove glyphs from a variable font into a Lottie template.
 
 pub mod animate;
+pub mod debug_pen;
 pub mod error;
 mod shape_pen;
 
@@ -8,7 +9,7 @@ use animate::Animation;
 use bodymovin::{
     layers::{AnyLayer, ShapeMixin},
     properties::{Property, Value},
-    shapes::{AnyShape, Group, SubPath},
+    shapes::{AnyShape, Fill, Group, SubPath},
     Bodymovin as Lottie,
 };
 use kurbo::{Affine, BezPath, Point, Rect};
@@ -50,7 +51,13 @@ pub fn default_template(font_drawbox: &Rect) -> Lottie {
                             },
                             ..Default::default()
                         }),
-                        AnyShape::Fill(Default::default()),
+                        AnyShape::Fill(Fill {
+                            opacity: Property {
+                                value: Value::Fixed(50.0), // handy for debugging overlapping shapes
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        }),
                         AnyShape::Transform(Default::default()),
                     ],
                     ..Default::default()
