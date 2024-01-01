@@ -157,12 +157,15 @@ pub fn a_contained_point(subpath: &BezPath) -> Option<Point> {
 /// Since we are using non-zero fill, figure out shape by shape what the winding value is. Initially I thought
 /// we could simply look at the direction from [`BezPath::area`] but that ofc isn't enough to know if the final
 /// winding is nonzero.
-fn group_icon_parts(shapes: Vec<(BezPath, SubPath)>) -> Vec<Vec<(BezPath, SubPath)>> {
+pub fn group_icon_parts(shapes: Vec<(BezPath, SubPath)>) -> Vec<Vec<(BezPath, SubPath)>> {
     // Figure out what is/isn't filled
     let filled: Vec<_> = shapes
         .iter()
         .map(|(bez, _)| {
             let Some(contained) = a_contained_point(bez) else {
+                if bez.area() != 0.0 {
+                    eprintln!("THERE IS NO CONTAINED POINT?!");
+                }
                 return false;
             };
             let winding: i32 = shapes.iter().map(|(bez, _)| bez.winding(contained)).sum();
@@ -175,7 +178,7 @@ fn group_icon_parts(shapes: Vec<(BezPath, SubPath)>) -> Vec<Vec<(BezPath, SubPat
     ordered.sort_by_cached_key(|i| {
         (
             -1 * filled[*i] as i32,
-            OrderedFloat(-shapes[*i].0.area().abs()),
+            OrderedFloat(shapes[*i].0.bounding_box().area()),
         )
     });
 
@@ -210,7 +213,29 @@ fn group_icon_parts(shapes: Vec<(BezPath, SubPath)>) -> Vec<Vec<(BezPath, SubPat
     groups
 }
 
-fn group_with_transform(shapes: Vec<(BezPath, SubPath)>, transform: Transform) -> AnyShape {
+fn nth_group_color(n: usize) -> (u8, u8, u8) {
+    // Taken from https://m2.material.io/design/color/the-color-system.html#tools-for-picking-colors
+    // "2014 Material Design color palettes"
+    const COLORS: &[(u8, u8, u8)] = &[
+        (0xEF, 0x53, 0x50),
+        (0xEC, 0x40, 0x7A),
+        (0xAB, 0x47, 0xBC),
+        (0xE5, 0x39, 0x35),
+        (0xD8, 0x1B, 0x60),
+        (0x8E, 0x24, 0xAA),
+        (0xC6, 0x28, 0x28),
+        (0xAD, 0x14, 0x57),
+        (0x6A, 0x1B, 0x9A),
+    ];
+
+    COLORS[n % COLORS.len()]
+}
+
+fn group_with_transform(
+    shape_idx: usize,
+    shapes: Vec<(BezPath, SubPath)>,
+    transform: Transform,
+) -> AnyShape {
     // https://lottiefiles.github.io/lottie-docs/breakdown/bouncy_ball/#transform
     // says players like to find a transform at the end of a group and having a fill before
     // the transform seems fairly ubiquotous so we'll build our pulse as a group
@@ -219,12 +244,18 @@ fn group_with_transform(shapes: Vec<(BezPath, SubPath)>, transform: Transform) -
     group
         .items
         .extend(shapes.into_iter().map(|(_, s)| AnyShape::Shape(s)));
+
+    let (r, g, b) = nth_group_color(shape_idx);
+
     group.items.push(AnyShape::Fill(Fill {
         opacity: Property {
-            value: Value::Fixed(50.0), // handy for debugging overlapping shapes
+            value: Value::Fixed(100.0), // default of 0 is not helpful
             ..Default::default()
         },
-        color: Default::default(),
+        color: Property {
+            value: Value::Fixed(vec![r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0]), // handy for debugging grouping
+            ..Default::default()
+        },
         ..Default::default()
     }));
     group.items.push(AnyShape::Transform(transform));
@@ -279,7 +310,7 @@ fn pulse(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, SubPath)>
             ..Default::default()
         },
     ]);
-    group_with_transform(shapes, transform)
+    group_with_transform(shape_idx, shapes, transform)
 }
 
 fn twirl(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, SubPath)>) -> AnyShape {
@@ -314,5 +345,5 @@ fn twirl(start: f64, end: f64, shape_idx: usize, shapes: Vec<(BezPath, SubPath)>
             ..Default::default()
         },
     ]);
-    group_with_transform(shapes, transform)
+    group_with_transform(shape_idx, shapes, transform)
 }

@@ -19,7 +19,7 @@ font='../material-design-icons/variablefont/MaterialSymbolsOutlined[FILL,GRAD,op
 sample_file=samples2.txt
 cargo build --release
 
-generate samples2.txt pulse-whole "$font"
+#generate samples2.txt pulse-whole "$font"
 generate samples2.txt pulse-parts "$font"
 
 python3 makedemo.py

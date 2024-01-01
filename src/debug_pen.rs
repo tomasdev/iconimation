@@ -3,11 +3,15 @@
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use ordered_float::OrderedFloat;
 use skrifa::outline::OutlinePen;
+use write_fonts::pens::write_to_pen;
 
-use crate::animate::a_contained_point;
+use crate::{
+    animate::{a_contained_point, group_icon_parts},
+    shape_pen::SubPathPen,
+};
 
 pub struct DebugPen {
-    default_viewbox: Rect,
+    glyph_block: Rect,
     paths: Vec<BezPath>,
 }
 
@@ -31,10 +35,109 @@ impl MarkPoint {
     }
 }
 
+fn draw_annotated(svg: &mut String, y_offset: f64, mut paths: Vec<BezPath>) {
+    paths.sort_by_cached_key(|p| OrderedFloat(p.area().abs()));
+
+    svg.push_str(&format!("<g transform=\"translate(0, {y_offset})\">\n"));
+
+    for path in &paths {
+        let path_svg = path.to_svg();
+        if y_offset == 0.0 {
+            eprintln!("{}", &path_svg[0..path_svg.find(" ").unwrap()]);
+        }
+
+        let contained = a_contained_point(&path);
+        let mut filled = 0;
+        if let Some(contained) = contained {
+            // work out non-zero fill
+            for path in &paths {
+                let wind = path.winding(contained);
+                filled += wind;
+                if y_offset == 0.0 {
+                    let path = path.to_svg();
+                    eprintln!(
+                        "  {} contributes {}",
+                        &path[0..path.find(" ").unwrap()],
+                        wind
+                    );
+                }
+            }
+        }
+        let filled = filled != 0; // nonzero winding?!
+
+        if y_offset == 0.0 {
+            eprintln!("  filled? {filled}");
+        }
+
+        svg.push_str("  <path opacity=\"33%\" d=\"");
+        svg.push_str(&path_svg);
+        svg.push_str("  \"");
+        if !filled {
+            svg.push_str("\n        fill=\"none\" stroke=\"red\" stroke-dasharray=\"4\"");
+        }
+        svg.push_str(" />\n");
+
+        let bbox = path.bounding_box();
+        svg.push_str(&format!("  <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"black\" stroke-dasharray=\"16\" />",
+            bbox.min_x(), bbox.min_y(), bbox.width(), bbox.height()));
+
+        let first_move = match path.elements().first() {
+            Some(PathEl::MoveTo(p)) => format!("{p}"),
+            _ => "??".to_string(),
+        };
+
+        svg.push_str(&format!(
+            "  <text x=\"{}\" y=\"{}\">first {first_move} area {:.2}</text>\n",
+            bbox.min_x(),
+            bbox.min_y() - 2.0,
+            path.area()
+        ));
+
+        for el in path.elements() {
+            let mut last_move = None;
+            let mut curr = None;
+            match el {
+                PathEl::MoveTo(p) => {
+                    last_move = Some(p.clone());
+                    curr = Some(p.clone());
+                    svg.push_str(&MarkPoint::End(*p).svg());
+                }
+                PathEl::LineTo(p) => {
+                    curr = Some(p.clone());
+                    svg.push_str(&MarkPoint::End(*p).svg());
+                }
+                PathEl::QuadTo(c, p) => {
+                    curr = Some(p.clone());
+                    svg.push_str(&MarkPoint::Control(*c).svg());
+                    svg.push_str(&MarkPoint::End(*p).svg());
+                }
+                PathEl::CurveTo(c0, c1, p) => {
+                    curr = Some(p.clone());
+                    svg.push_str(&MarkPoint::Control(*c0).svg());
+                    svg.push_str(&MarkPoint::Control(*c1).svg());
+                    svg.push_str(&MarkPoint::End(*p).svg());
+                }
+                PathEl::ClosePath => {
+                    curr = last_move;
+                    if let Some(last_move) = last_move {
+                        svg.push_str(&MarkPoint::End(last_move).svg());
+                    }
+                }
+            }
+        }
+
+        if let Some(contained) = contained {
+            svg.push_str(&MarkPoint::Contained(contained).svg());
+        }
+    }
+
+    svg.push_str(&format!("</g>\n"));
+}
+
 impl DebugPen {
-    pub fn new(default_viewbox: Rect) -> DebugPen {
+    pub fn new(glyph_block: Rect) -> DebugPen {
         DebugPen {
-            default_viewbox,
+            glyph_block,
             paths: Default::default(),
         }
     }
@@ -47,22 +150,41 @@ impl DebugPen {
     }
 
     pub fn to_svg(self) -> String {
-        let viewbox = self
-            .paths
-            .iter()
-            .map(|p| p.control_box())
-            .reduce(|acc, e| acc.union(e))
-            .unwrap_or_default()
-            .union(self.default_viewbox);
-
-        // flip around the middle
+        // It's nice to draw the right way up
         let transform = Affine::IDENTITY
             // Move center-y to be at y=0
-            .then_translate((0.0, -viewbox.center().y).into())
+            .then_translate((0.0, -self.glyph_block.center().y).into())
             // Do a flip!
             .then_scale_non_uniform(1.0, -1.0)
             // Go back again
-            .then_translate((0.0, viewbox.center().y).into());
+            .then_translate((0.0, self.glyph_block.center().y).into());
+
+        let mut paths: Vec<_> = self
+            .paths
+            .into_iter()
+            .map(|mut p| {
+                p.apply_affine(transform);
+                p
+            })
+            .collect();
+
+        let shapes = paths
+            .iter()
+            .flat_map(|bez| {
+                let mut pen = SubPathPen::default();
+                write_to_pen(bez, &mut pen);
+                pen.to_shapes().into_iter()
+            })
+            .collect();
+        let groups = group_icon_parts(shapes);
+
+        // We need one glyph block for the annotated svg plus one per group, vertically
+        let viewbox = Rect::new(
+            self.glyph_block.min_x(),
+            self.glyph_block.min_y(),
+            self.glyph_block.max_x(),
+            self.glyph_block.min_y() + self.glyph_block.height() * (1 + groups.len()) as f64,
+        );
 
         let mut svg = format!(
             r#"<svg viewBox="{} {} {} {}""#,
@@ -74,105 +196,16 @@ impl DebugPen {
         svg.push_str(r#" xmlns="http://www.w3.org/2000/svg""#);
         svg.push_str(">\n");
 
-        let mut paths: Vec<_> = self
-            .paths
-            .into_iter()
-            .map(|mut p| {
-                p.apply_affine(transform);
-                p
-            })
-            .collect();
+        // Draw the entire glyph annotated
+        draw_annotated(&mut svg, 0.0, paths);
 
-        paths.sort_by_cached_key(|p| OrderedFloat(p.area().abs()));
+        // Draw each group for animation, each in it's own glyph block vertically
 
-        for path in &paths {
-            let contained = a_contained_point(&path);
-            let mut filled = 0;
-            eprintln!(
-                "{} found contained? {} ({:?})",
-                path.to_svg(),
-                contained.is_some(),
-                contained
-            );
-            if let Some(contained) = contained {
-                // work out non-zero fill
-                for path in &paths {
-                    let wind = path.winding(contained);
-                    filled += wind;
-                    if contained == (280.0, 479.999).into() {
-                        let path = path.to_svg();
-                        eprintln!(
-                            "  {} contributes {}",
-                            &path[0..path.find(" ").unwrap()],
-                            wind
-                        );
-                    }
-                }
-            }
-
-            let filled = filled != 0; // nonzero winding?!
-            eprintln!("  filled? {filled}");
-
-            svg.push_str("  <path opacity=\"33%\" d=\"");
-            svg.push_str(&path.to_svg());
-            svg.push_str("  \"");
-            if !filled {
-                svg.push_str("\n        fill=\"none\" stroke=\"red\" stroke-dasharray=\"4\"");
-            }
-            svg.push_str(" />\n");
-
-            let bbox = path.bounding_box();
-            svg.push_str(&format!("  <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"black\" />",
-                bbox.min_x(), bbox.min_y(), bbox.width(), bbox.height()));
-
-            let first_move = match path.elements().first() {
-                Some(PathEl::MoveTo(p)) => format!("{p}"),
-                _ => "??".to_string(),
-            };
-
-            svg.push_str(&format!(
-                "  <text x=\"{}\" y=\"{}\">first {first_move} area {:.2}</text>\n",
-                bbox.min_x(),
-                bbox.min_y() - 2.0,
-                path.area()
-            ));
-
-            for el in path.elements() {
-                let mut last_move = None;
-                let mut curr = None;
-                match el {
-                    PathEl::MoveTo(p) => {
-                        last_move = Some(p.clone());
-                        curr = Some(p.clone());
-                        svg.push_str(&MarkPoint::End(*p).svg());
-                    }
-                    PathEl::LineTo(p) => {
-                        curr = Some(p.clone());
-                        svg.push_str(&MarkPoint::End(*p).svg());
-                    }
-                    PathEl::QuadTo(c, p) => {
-                        curr = Some(p.clone());
-                        svg.push_str(&MarkPoint::Control(*c).svg());
-                        svg.push_str(&MarkPoint::End(*p).svg());
-                    }
-                    PathEl::CurveTo(c0, c1, p) => {
-                        curr = Some(p.clone());
-                        svg.push_str(&MarkPoint::Control(*c0).svg());
-                        svg.push_str(&MarkPoint::Control(*c1).svg());
-                        svg.push_str(&MarkPoint::End(*p).svg());
-                    }
-                    PathEl::ClosePath => {
-                        curr = last_move;
-                        if let Some(last_move) = last_move {
-                            svg.push_str(&MarkPoint::End(last_move).svg());
-                        }
-                    }
-                }
-            }
-
-            if let Some(contained) = contained {
-                svg.push_str(&MarkPoint::Contained(contained).svg());
-            }
+        for (i, group) in groups.iter().enumerate() {
+            // group i draws into glyph block i+1
+            let y_offset = self.glyph_block.min_y() + (i as f64 + 1.0) * self.glyph_block.height();
+            let paths: Vec<_> = group.iter().map(|(bez, _)| bez.clone()).collect();
+            draw_annotated(&mut svg, y_offset, paths);
         }
 
         svg.push_str("\n</svg>");
