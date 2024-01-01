@@ -2,12 +2,25 @@
 
 set -e
 
+function generate() {
+    local sample_file="$1"
+    local animation="$2"
+    local font="$3"
+    # strip comments
+    sed 's/#.*//g' "$sample_file" \
+    | grep -v "^\S*$" \
+    | awk "{ print \"--codepoint 0x\"\$2\" --animation $animation --out-file demo/\"\$1\"-$animation.json\" } " \
+    | xargs -L1 target/release/iconimation --font "$font"
+}
+
 rm -f demo/*
 
-font="../material-design-icons/font/MaterialIconsOutlined-Regular.otf"
+font='../material-design-icons/variablefont/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf'
+sample_file=samples2.txt
 cargo build --release
-awk '{ print "--codepoint 0x"$2" --animation pulse-whole --out-file demo/"$1"-pulse.json" } ' samples.txt | xargs -L1 echo target/release/iconimation --font $font
-awk '{ print "--codepoint 0x"$2" --animation pulse-parts --out-file demo/"$1"-pulse-parts.json" } ' samples.txt | xargs -L1 echo target/release/iconimation --font $font
+
+generate samples2.txt pulse-whole "$font"
+generate samples2.txt pulse-parts "$font"
 
 python3 makedemo.py
 

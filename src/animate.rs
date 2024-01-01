@@ -166,10 +166,7 @@ fn group_with_transform(shapes: Vec<(BezPath, SubPath)>, transform: Transform) -
             value: Value::Fixed(100.0),
             ..Default::default()
         },
-        color: Property {
-            value: Value::Fixed(vec![1.0, 0.0, 0.0, 1.0]),
-            ..Default::default()
-        },
+        color: Default::default(),
         ..Default::default()
     }));
     group.items.push(AnyShape::Transform(transform));
