@@ -13,3 +13,4 @@ serde_json = "1.0"
 
 kurbo.workspace = true
 skrifa.workspace = true
+bodymovin.workspace = true

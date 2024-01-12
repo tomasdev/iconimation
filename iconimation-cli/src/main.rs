@@ -1,23 +1,22 @@
 use std::{fs, path::Path};
 
+use bodymovin::Bodymovin as Lottie;
 use clap::Parser;
 use clap::ValueEnum;
 use iconimation::animate::Animation;
+use iconimation::Template;
 use iconimation::debug_pen::DebugPen;
 use iconimation::default_template;
-use iconimation::Template;
 use kurbo::Point;
 use kurbo::Rect;
-use skrifa::instance::Size;
-use skrifa::{
-    raw::{FontRef, TableProvider},
-    MetadataProvider,
-};
+use skrifa::MetadataProvider;
+use skrifa::raw::FontRef;
+use skrifa::raw::TableProvider;
 
 /// Clap-friendly version of [Animation]
 #[derive(ValueEnum, Clone, Debug)]
 pub enum CliAnimation {
-    Still,
+    None,
     PulseWhole,
     PulseParts,
     TwirlWhole,
@@ -27,7 +26,7 @@ pub enum CliAnimation {
 impl CliAnimation {
     fn to_lib(&self) -> Animation {
         match self {
-            CliAnimation::Still => Animation::Still,
+            CliAnimation::None => Animation::None,
             CliAnimation::PulseWhole => Animation::PulseWhole,
             CliAnimation::PulseParts => Animation::PulseParts,
             CliAnimation::TwirlWhole => Animation::TwirlWhole,
@@ -48,6 +47,9 @@ struct Args {
 
     #[arg(long)]
     codepoint: String,
+
+    #[arg(long)]
+    template: Option<String>,
 
     #[arg(long)]
     #[clap(required(true))]
@@ -84,18 +86,22 @@ fn main() {
 
     if args.debug {
         let mut pen = DebugPen::new(Rect::new(0.0, 0.0, upem, upem));
-        glyph.draw(Size::unscaled(), &mut pen).unwrap();
+        glyph.draw(skrifa::instance::Size::unscaled(), &mut pen).unwrap();
         let debug_out = Path::new(&args.out_file).with_extension("svg");
         fs::write(&debug_out, pen.to_svg()).unwrap();
         eprintln!("Wrote debug svg {}", args.out_file);
     }
 
-    let animation = args.animation.to_lib();
+    let mut lottie = if let Some(template) = args.template {
+        Lottie::load(template).expect("Unable to load custom template")
+    } else {
+        default_template(&font_drawbox)
+    };
 
-    let mut lottie = default_template(&font_drawbox);
+    let animation = args.animation.to_lib();
     lottie
         .replace_shape(&font_drawbox, &glyph, animation.animator())
-        .unwrap();
+        .expect("Failed to replace shape");
 
     fs::write(
         &args.out_file,

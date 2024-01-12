@@ -25,13 +25,26 @@ Don't count on anything working correctly.
 
     # A spin perhaps?
     $ cargo run -- --codepoint 0xeba8 --font '../material-design-icons/variablefont/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf' --animation twirl-parts
+
+    # I have my own template!
+    $ cargo run -- --codepoint 0xeba8 --font '../material-design-icons/variablefont/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf' --animation template --template iconimation/resources/templates/00_SP_Lottie.json
     ```
 
 1. Try it out
    * https://lottiefiles.github.io/lottie-docs/playground/json_editor/ perhaps?
    * To generate a lottie and place it on the copy buffer so you can paste it into ^
-   `$ cargo run -- --codepoint 0xeba8 --font '../material-design-icons/variablefont/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf' --animation twirl-parts && cat output.json | xclip -selection c`
+   `$ cargo run -- --codepoint 0xeba8 --font '../material-design-icons/variablefont/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf' --animation twirl-parts  && cat output.json | xclip -selection c`
 
    ![Playground](resources/images/playground.png)
 
-To producea demo with several samples run `makedemo.sh`.
+To produce a demo with several samples run `makedemo.sh`.
+
+## Templates
+
+A template should:
+
+* Have a group named "placeholder"
+* Have a single square rectangle within that group
+* Animate the square, such as by using transforms
+
+The square will be replaced by an icons path(s), resulting in all icons knowing how to perform an animation.

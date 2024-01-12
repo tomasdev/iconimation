@@ -12,7 +12,7 @@ use crate::Error;
 
 #[derive(Clone, Debug)]
 pub enum Animation {
-    Still,
+    None,
     PulseWhole,
     PulseParts,
     TwirlWhole,
@@ -22,7 +22,7 @@ pub enum Animation {
 impl Animation {
     pub fn animator(&self) -> Box<dyn Animator> {
         match self {
-            Animation::Still => Box::new(Still),
+            Animation::None => Box::new(Still),
             Animation::PulseWhole => Box::new(Pulse),
             Animation::PulseParts => Box::new(PulseParts),
             Animation::TwirlWhole => Box::new(Twirl),
