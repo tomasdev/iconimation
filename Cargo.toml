@@ -1,4 +1,5 @@
 [workspace.dependencies]
+kurbo = "0.10"
 skrifa = "0.15.1"
 
 [workspace]
