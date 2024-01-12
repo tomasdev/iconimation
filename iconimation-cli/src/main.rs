@@ -4,14 +4,14 @@ use bodymovin::Bodymovin as Lottie;
 use clap::Parser;
 use clap::ValueEnum;
 use iconimation::animate::Animation;
-use iconimation::Template;
 use iconimation::debug_pen::DebugPen;
 use iconimation::default_template;
+use iconimation::Template;
 use kurbo::Point;
 use kurbo::Rect;
-use skrifa::MetadataProvider;
 use skrifa::raw::FontRef;
 use skrifa::raw::TableProvider;
+use skrifa::MetadataProvider;
 
 /// Clap-friendly version of [Animation]
 #[derive(ValueEnum, Clone, Debug)]
@@ -86,9 +86,11 @@ fn main() {
 
     if args.debug {
         let mut pen = DebugPen::new(Rect::new(0.0, 0.0, upem, upem));
-        glyph.draw(skrifa::instance::Size::unscaled(), &mut pen).unwrap();
+        glyph
+            .draw(skrifa::instance::Size::unscaled(), &mut pen)
+            .unwrap();
         let debug_out = Path::new(&args.out_file).with_extension("svg");
-        fs::write(&debug_out, pen.to_svg()).unwrap();
+        fs::write(debug_out, pen.to_svg()).unwrap();
         eprintln!("Wrote debug svg {}", args.out_file);
     }
 
@@ -100,7 +102,7 @@ fn main() {
 
     let animation = args.animation.to_lib();
     lottie
-        .replace_shape(&font_drawbox, &glyph, animation.animator())
+        .replace_shape(&font_drawbox, &glyph, animation.animator().as_ref())
         .expect("Failed to replace shape");
 
     fs::write(
