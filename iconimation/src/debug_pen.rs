@@ -93,32 +93,26 @@ fn draw_annotated(svg: &mut String, y_offset: f64, mut paths: Vec<BezPath>) {
             path.area()
         ));
 
+        let mut last_move = None;
         for el in path.elements() {
-            let mut last_move = None;
-            let mut curr = None;
             match el {
                 PathEl::MoveTo(p) => {
                     last_move = Some(p.clone());
-                    curr = Some(p.clone());
                     svg.push_str(&MarkPoint::End(*p).svg());
                 }
                 PathEl::LineTo(p) => {
-                    curr = Some(p.clone());
                     svg.push_str(&MarkPoint::End(*p).svg());
                 }
                 PathEl::QuadTo(c, p) => {
-                    curr = Some(p.clone());
                     svg.push_str(&MarkPoint::Control(*c).svg());
                     svg.push_str(&MarkPoint::End(*p).svg());
                 }
                 PathEl::CurveTo(c0, c1, p) => {
-                    curr = Some(p.clone());
                     svg.push_str(&MarkPoint::Control(*c0).svg());
                     svg.push_str(&MarkPoint::Control(*c1).svg());
                     svg.push_str(&MarkPoint::End(*p).svg());
                 }
                 PathEl::ClosePath => {
-                    curr = last_move;
                     if let Some(last_move) = last_move {
                         svg.push_str(&MarkPoint::End(last_move).svg());
                     }
@@ -159,7 +153,7 @@ impl DebugPen {
             // Go back again
             .then_translate((0.0, self.glyph_block.center().y).into());
 
-        let mut paths: Vec<_> = self
+        let paths: Vec<_> = self
             .paths
             .into_iter()
             .map(|mut p| {
