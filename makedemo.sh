@@ -10,7 +10,7 @@ function generate() {
     sed 's/#.*//g' "$sample_file" \
     | grep -v "^\S*$" \
     | awk "{ print \"--codepoint 0x\"\$2\" --animation $animation --out-file demo/\"\$1\"-$animation.json\" } " \
-    | xargs -L1 target/release/iconimation --font "$font" --debug
+    | xargs -L1 target/release/iconimation-cli --font "$font" --debug
 }
 
 rm -f demo/*
