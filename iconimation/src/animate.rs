@@ -177,7 +177,7 @@ pub fn group_icon_parts(shapes: Vec<(BezPath, SubPath)>) -> Vec<Vec<(BezPath, Su
     let mut ordered: Vec<_> = (0..shapes.len()).collect();
     ordered.sort_by_cached_key(|i| {
         (
-            -1 * filled[*i] as i32,
+            -(filled[*i] as i32),
             OrderedFloat(shapes[*i].0.bounding_box().area()),
         )
     });
@@ -262,7 +262,7 @@ fn group_with_transform(
     AnyShape::Group(group)
 }
 
-fn center(shapes: &Vec<(BezPath, SubPath)>) -> Point {
+fn center(shapes: &[(BezPath, SubPath)]) -> Point {
     shapes
         .iter()
         .map(|(b, _)| b.bounding_box())

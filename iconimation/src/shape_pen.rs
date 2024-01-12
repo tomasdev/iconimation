@@ -1,4 +1,4 @@
-//! An [OutlinePen] that generates [Shape]'s for subpaths.
+//! An [OutlinePen] that generates [SubPath]'s for subpaths.
 //!
 //! Based on <https://github.com/rsheeter/read-fonts-wasm>
 
@@ -22,7 +22,7 @@ impl SubPathPen {
         return self.paths.last_mut().unwrap();
     }
 
-    pub fn to_shapes(self) -> Vec<(BezPath, SubPath)> {
+    pub fn into_shapes(self) -> Vec<(BezPath, SubPath)> {
         self.paths
             .into_iter()
             .map(|b| {
@@ -117,7 +117,7 @@ fn bez_to_shape(path: &BezPath) -> SubPath {
                 value.out_point.push(Point::ZERO.into());
                 value.in_point.push(Point::ZERO.into());
             }
-            kurbo::PathEl::LineTo(p) => add_cubic(&mut value, last_on, p.into(), p.into()),
+            kurbo::PathEl::LineTo(p) => add_cubic(&mut value, last_on, p, p),
             kurbo::PathEl::QuadTo(control, end) => {
                 // https://pomax.github.io/bezierinfo/#reordering
                 let c0 = last_on.one_third() + control.two_thirds().to_vec2();

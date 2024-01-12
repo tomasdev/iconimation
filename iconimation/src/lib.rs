@@ -65,15 +65,15 @@ pub trait Template {
         &mut self,
         font_drawbox: &Rect,
         glyph: &OutlineGlyph,
-        animator: Box<dyn Animator>,
+        animator: &dyn Animator,
     ) -> Result<(), Error>;
 }
 
 fn replace_placeholders(
-    layers: &mut Vec<AnyLayer>,
+    layers: &mut [AnyLayer],
     font_drawbox: &Rect,
     glyph: &OutlineGlyph,
-    animator: &Box<dyn Animator>,
+    animator: &dyn Animator,
 ) -> Result<usize, Error> {
     let mut shapes_updated = 0;
     for layer in layers.iter_mut() {
@@ -148,14 +148,14 @@ impl Template for Lottie {
         &mut self,
         font_drawbox: &Rect,
         glyph: &OutlineGlyph,
-        animator: Box<dyn Animator>,
+        animator: &dyn Animator,
     ) -> Result<(), Error> {
         let mut shapes_updated =
-            replace_placeholders(&mut self.layers, font_drawbox, glyph, &animator)?;
+            replace_placeholders(&mut self.layers, font_drawbox, glyph, animator)?;
         for asset in self.assets.iter_mut() {
             shapes_updated += match asset {
                 Asset::PreComp(precomp) => {
-                    replace_placeholders(&mut precomp.layers, font_drawbox, glyph, &animator)?
+                    replace_placeholders(&mut precomp.layers, font_drawbox, glyph, animator)?
                 }
                 Asset::Image(..) => 0,
             }
@@ -217,7 +217,7 @@ fn bez_for_subpath(subpath: &SubPath) -> BezPath {
     path
 }
 
-/// Returns a [Shape] and [BezPath] in Lottie units for each subpath of a glyph
+/// Returns a [SubPath] and [BezPath] in Lottie units for each subpath of a glyph
 fn subpaths_for_glyph(
     glyph: &OutlineGlyph,
     font_units_to_lottie_units: Affine,
@@ -236,7 +236,7 @@ fn subpaths_for_glyph(
         .draw(Size::unscaled(), &mut transform_pen)
         .map_err(Error::DrawError)?;
 
-    Ok(subpath_pen.to_shapes())
+    Ok(subpath_pen.into_shapes())
 }
 
 #[cfg(test)]

@@ -1,0 +1,62 @@
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+
+name: Continuous integration
+
+# The check, clippy-lint, and test-stable-* jobs should typically be direct copies from
+# https://github.com/googlefonts/fontations/blob/main/.github/workflows/rust.yml.
+# other than the list of crates for cargo check no std
+
+jobs:  
+  check:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: rustup component add rustfmt
+        run: rustup component add rustfmt
+
+      - name: rustfmt check
+        run: cargo fmt --all -- --check
+
+      # ensure that docs are sane (links are reachable etc)
+      - name: cargo doc
+        run: cargo doc --all-features --document-private-items --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  clippy-lint:
+    name: Clippy lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo clippy --all-features
+        run: cargo clippy --all-features --all-targets -- -D warnings
+
+      - name: cargo clippy --no-default-features
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
+
+  test:
+    name: cargo test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo test
+        run: cargo test --all-targets --all-features

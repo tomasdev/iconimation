@@ -43,10 +43,10 @@ fn draw_annotated(svg: &mut String, y_offset: f64, mut paths: Vec<BezPath>) {
     for path in &paths {
         let path_svg = path.to_svg();
         if y_offset == 0.0 {
-            eprintln!("{}", &path_svg[0..path_svg.find(" ").unwrap()]);
+            eprintln!("{}", &path_svg[0..path_svg.find(' ').unwrap()]);
         }
 
-        let contained = a_contained_point(&path);
+        let contained = a_contained_point(path);
         let mut filled = 0;
         if let Some(contained) = contained {
             // work out non-zero fill
@@ -57,7 +57,7 @@ fn draw_annotated(svg: &mut String, y_offset: f64, mut paths: Vec<BezPath>) {
                     let path = path.to_svg();
                     eprintln!(
                         "  {} contributes {}",
-                        &path[0..path.find(" ").unwrap()],
+                        &path[0..path.find(' ').unwrap()],
                         wind
                     );
                 }
@@ -97,7 +97,7 @@ fn draw_annotated(svg: &mut String, y_offset: f64, mut paths: Vec<BezPath>) {
         for el in path.elements() {
             match el {
                 PathEl::MoveTo(p) => {
-                    last_move = Some(p.clone());
+                    last_move = Some(*p);
                     svg.push_str(&MarkPoint::End(*p).svg());
                 }
                 PathEl::LineTo(p) => {
@@ -125,7 +125,7 @@ fn draw_annotated(svg: &mut String, y_offset: f64, mut paths: Vec<BezPath>) {
         }
     }
 
-    svg.push_str(&format!("</g>\n"));
+    svg.push_str("</g>\n");
 }
 
 impl DebugPen {
@@ -167,7 +167,7 @@ impl DebugPen {
             .flat_map(|bez| {
                 let mut pen = SubPathPen::default();
                 write_to_pen(bez, &mut pen);
-                pen.to_shapes().into_iter()
+                pen.into_shapes().into_iter()
             })
             .collect();
         let groups = group_icon_parts(shapes);
