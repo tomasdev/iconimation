@@ -9,7 +9,7 @@ function generate() {
     # strip comments
     sed 's/#.*//g' "$sample_file" \
     | grep -v "^\S*$" \
-    | awk "{ print \"--codepoint 0x\"\$2\" --animation $animation --out-file demo/\"\$1\"-$animation.json\" } " \
+    | awk "{ print \"--codepoint 0x\"\$2\" --animation $animation --template resources/templates/ScalePosition.json --out-file demo/\"\$1\"-$animation.json\" } " \
     | xargs -L1 target/release/iconimation-cli --font "$font" --debug
 }
 
@@ -20,7 +20,9 @@ sample_file=samples2.txt
 cargo build --release
 
 #generate samples2.txt pulse-whole "$font"
-generate samples2.txt pulse-parts "$font"
+#generate samples2.txt pulse-parts "$font"
+
+generate samples2.txt none "$font"
 
 python3 makedemo.py
 
