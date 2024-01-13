@@ -22,7 +22,7 @@ cargo build --release
 #generate samples2.txt pulse-whole "$font"
 #generate samples2.txt pulse-parts "$font"
 
-generate samples2.txt none "$font"
+generate samples.txt none "$font"
 
 python3 makedemo.py
 
