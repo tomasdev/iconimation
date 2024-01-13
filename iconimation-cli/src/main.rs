@@ -1,7 +1,5 @@
 use std::{fs, path::Path};
 
-use bodymovin::layers::AnyLayer;
-use bodymovin::shapes::AnyShape;
 use bodymovin::Bodymovin as Lottie;
 use clap::Parser;
 use clap::ValueEnum;
@@ -101,41 +99,6 @@ fn main() {
     } else {
         default_template(&font_drawbox)
     };
-
-    // TEMPORARY DEBUG
-    for layer in &lottie.layers {
-        eprintln!(
-            "{} Layer",
-            match layer {
-                AnyLayer::Shape(..) => "Shape",
-                _ => "??",
-            }
-        );
-        if let AnyLayer::Shape(layer) = layer {
-            let mut frontier: Vec<_> = layer.mixin.shapes.iter().map(|s| (0, s)).collect();
-            while let Some((depth, shape)) = frontier.pop() {
-                let pad = depth * 2;
-                eprintln!(
-                    "{:<pad$} {} Shape",
-                    "",
-                    match shape {
-                        AnyShape::Rect(..) => "Rect",
-                        AnyShape::Shape(..) => "Shape",
-                        AnyShape::Fill(..) => "Fill",
-                        AnyShape::Group(g) => {
-                            frontier.extend(g.items.iter().rev().map(|s| (depth + 1, s)));
-                            "Group"
-                        }
-                        AnyShape::Transform(t) => {
-                            eprintln!("{:<pad$} {:#?}", "", t.position);
-                            "Transform"
-                        }
-                        _ => "??",
-                    }
-                )
-            }
-        }
-    }
 
     let animation = args.animation.to_lib();
     lottie
