@@ -107,11 +107,14 @@ fn replace_placeholders(
                         };
                         assert_eq!(2, pos.len());
                         assert_eq!(2, size.len());
+                        // https://lottiefiles.github.io/lottie-docs/schema/#/$defs/shapes/rectangle notes position
+                        // of a rect is the center; what we want is top-left, bottom-right
+                        let (x0, y0) = (pos[0] - size[0] / 2.0, pos[1] - size[1] / 2.0);
                         Some(Rect {
-                            x0: pos[0],
-                            y0: pos[1],
-                            x1: size[0],
-                            y1: size[1],
+                            x0,
+                            y0,
+                            x1: x0 + size[0],
+                            y1: y0 + size[1],
                         })
                     }
                     _ => None,
@@ -124,6 +127,7 @@ fn replace_placeholders(
             }
             // reverse because replacing 1:n shifts indices past our own
             for (i, transform) in insert_at.iter().rev() {
+                eprintln!("Replace {} using {:?}", shapes_updated + i, transform);
                 let mut glyph_shapes: Vec<_> = subpaths_for_glyph(glyph, *transform)?;
                 glyph_shapes.sort_by_cached_key(|(b, _)| {
                     let bbox = b.control_box();
