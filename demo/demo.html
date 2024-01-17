@@ -32,13 +32,17 @@ body {
   font: 14px/1.3 "Google Sans", sans-serif;
   margin: var(--default-margin);
 }
-body[theme="dark"] {
+[theme="dark"] {
   background: var(--gm3-dark-surface);
   color: var(--gm3-dark-on-surface);
 }
-body[theme="light"] {
+[theme="light"] {
   background: var(--gm3-light-surface);
   color: var(--gm3-light-on-surface);
+}
+[loop="true"] .stagger,
+[mode="grid"] .icon {
+  display: none;
 }
 #container {
   align-items: center;
@@ -77,6 +81,7 @@ Array.prototype.random = function random() {
 };
 
 (async function() {
+  const STAGGER_MS = 100;  // equivalent to 6 frames at 60fps
   const SIZES = [16, 24, 36, 48, 96, 240];
   const FILE_SUFFIX = '-none.json';
 
@@ -84,12 +89,12 @@ Array.prototype.random = function random() {
   const icons = lotties.map(lottie => lottie.replace(FILE_SUFFIX, ''));
 
   const settings = {
-    'mode': 'sizes',
+    'mode': 'grid',
     'animation': 'all',
     'icon': icons.random(),
     'theme': window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-    'stagger': true,
     'loop': false,
+    'stagger': true,
   };
 
   const gui = new dat.GUI();
@@ -104,23 +109,37 @@ Array.prototype.random = function random() {
   };
 
   for (const option of Object.keys(settings)) {
-    gui.add(settings, option, values[option]).onChange(() => render());
+    gui
+      .add(settings, option, values[option])
+      .onChange(() => render(option))
+      .domElement.closest('.cr').classList.add(option);
   }
 
   // TODO: implement the 3 animations. Temporarily disable GUI animations dropdown until then
   document.querySelector('[value="ScaleRotate"]').parentElement.disabled = true;
 
-  function render() {
+  async function render(changedKey) {
     const state = gui.getSaveObject().remembered.Default[0] ?? settings;
+
+    document.body.setAttribute('theme', state.theme);
+
+    // Toggling between dark/light theme should not re-render all lotties. Just the fg/bg color
+    if (changedKey === 'theme') {
+      return;
+    }
+
+    if (state.loop) {
+      state.stagger = false;
+    }
 
     const playerOptions = [
       state.mode === 'single' ? 'controls="true"' : '',
-      state.loop ? 'autoplay' : 'hover',
-      'loop',
+      state.loop ? 'autoplay loop' : 'hover',
       'disableShadowDOM="true"',
     ].join(' ');
 
-    document.body.setAttribute('theme', state.theme);
+    document.body.setAttribute('mode', `${state.mode}`)
+    document.body.setAttribute('loop', `${state.loop}`)
     container.setAttribute('mode', state.mode);
 
     switch (state.mode) {
@@ -138,7 +157,6 @@ Array.prototype.random = function random() {
         container.innerHTML = SIZES.map(size => `
           <div class="size">
             <lottie-player
-              seeker="30"
               style="width: ${size}px; height: ${size}px"
               src="lottie/${state.icon + FILE_SUFFIX}"
               ${playerOptions}
@@ -159,16 +177,32 @@ Array.prototype.random = function random() {
         throw new Error(`Unknown mode: ${state.mode}`);
     }
 
+    const players = Array.from(document.querySelectorAll('lottie-player'));
+
     // Workaround for choosing a better frame (let's render the one in the middle)
-    if (!state.loop && state.animation === 'all') {
+    if (!state.loop && state.animation === 'all' && !state.stagger) {
       const events = ['stop', 'ready'];
-      document.querySelectorAll('lottie-player').forEach(async (lottie) => {
+      for (const lottie of players) {
         for (const event of events) {
           lottie.addEventListener(event, () => {
             lottie.seek(Math.floor(lottie.getLottie().totalFrames / 2));
           });
         }
-      });
+      }
+    }
+    
+    // When not in loop, stagger the animations
+    if (state.stagger) {
+      await Promise.all(players.map(player => {
+        return new Promise(resolve => {
+          player.addEventListener('ready', () => resolve());
+        });
+      }));
+      for (const [index, player] of players.entries()) {
+        setTimeout(() => {
+          player.play();
+        }, index * STAGGER_MS);
+      }
     }
   }
 
